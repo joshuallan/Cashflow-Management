@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cashflow Intelligence</title>
+    <!-- This line links to the icon and "App" settings -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #101828; }
+        iframe { border: none; width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <!-- 1. GO TO GOOGLE SCRIPT. 2. CLICK DEPLOY. 3. PASTE THAT URL BELOW -->
+    <iframe src="https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec"></iframe>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+    </script>
+</body>
+</html>
