@@ -1,0 +1,2869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #101828; --ink-soft: #475467; --paper: #F5F6F8; --line: #E4E7EC;
+      --plan: #B54708; --dry: #B42318; --dry-bg: #FEE4E2;
+    }
+    body { font-family: 'IBM Plex Sans', system-ui, sans-serif; background: var(--paper); color: var(--ink); }
+    .mono { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+    ::placeholder { color: #CBD5E1; opacity: 1; }   /* lightened placeholder text */
+
+    /* ---------- FullCalendar skin ---------- */
+    .fc { --fc-border-color: var(--line); --fc-today-bg-color: #EFF4FF; font-size: 13px; }
+    /* Center the Month/Year title exactly over the Wednesday column: with a
+       Sunday-first 7-column grid, Wednesday's center sits at 50% of the grid
+       width, so the title chunk is pinned to the toolbar's absolute center
+       regardless of how wide the left/right button chunks are. */
+    .fc .fc-header-toolbar { position: relative; }
+    .fc .fc-header-toolbar .fc-toolbar-chunk:nth-child(2) { position: absolute; left: 50%; transform: translateX(-50%); }
+    .fc .fc-toolbar-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+    .fc .fc-button { background: #fff; border: 1px solid var(--line); color: var(--ink); box-shadow: none; font-weight: 500; text-transform: capitalize; }
+    .fc .fc-button:hover { background: #F9FAFB; }
+    .fc .fc-button-primary:not(:disabled).fc-button-active { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .fc .fc-daygrid-day-number { font-weight: 600; color: #1E293B; padding: 6px 8px; }
+    /* Frame set to height 100% and flex-column so the bal-footer pins to the absolute bottom regardless of row height */
+    .fc .fc-daygrid-day-frame { min-height: 140px; display: flex; flex-direction: column; padding: 4px 4px 0; height: 100%; }
+    .fc .fc-daygrid-day-events { margin-bottom: 4px; }
+    .fc .fc-event { border: none; border-radius: 4px; padding: 1px 6px; font-size: 11px; cursor: pointer; margin: 1px 2px; }
+    
+    /* Year View layout fix: Cells taller, dates on top, chips below */
+    .fc-multimonth .fc-daygrid-day-frame { 
+      min-height: 55px !important; 
+      padding: 2px !important; 
+      display: flex !important; 
+      flex-direction: column !important; 
+    }
+    .fc-multimonth .fc-daygrid-day-top {
+      display: flex !important;
+      justify-content: flex-end !important;
+      margin-bottom: 2px !important;
+    }
+    .fc-multimonth .fc-daygrid-day-number {
+      font-size: 11px !important;
+      padding: 2px 4px !important;
+      line-height: 1 !important;
+      z-index: 5 !important;
+    }
+    .fc-multimonth .fc-daygrid-day-events {
+      position: static !important;
+      margin-top: 0 !important;
+    }
+
+    #calendar { min-height: 900px; }   /* container has a shape before FullCalendar runs — prevents chip stacking */
+    
+    /* Year View (Multi-Month) specific chip optimizations */
+    .fc-multimonth .fc-event {
+      font-size: 8px !important;
+      padding: 0px 3px !important;
+      margin: 1px !important;
+    }
+    .fc-multimonth .evt-in, 
+    .fc-multimonth .evt-out, 
+    .fc-multimonth .evt-plan-out, 
+    .fc-multimonth .evt-plan-in, 
+    .fc-multimonth .evt-input, 
+    .fc-multimonth .evt-check { 
+      font-weight: 500 !important; /* Removes the heavy bolding */
+    }
+
+    /* ---- 3-state banking lifecycle chips ----
+       State 1 Planned  (TX=F, OK=F): light bg, HIGH-CONTRAST dark text (slate-900), 2px dashed border, hollow ◇
+       State 2 Inputted (TX=T, OK=F): saturated amber, white bold, solid dark-amber border, filled ◆
+       State 3 Settled  (TX=T, OK=T): saturated green/red, white bold */
+    .evt-in   { background: #16a34a; color: #ffffff; font-weight: 700; }
+    .evt-out  { background: #dc2626; color: #ffffff; font-weight: 700; }
+    .evt-plan-out, .evt-plan-in { background: #999999; color: #0F172A; font-weight: 700; border: 2px dashed #94A3B8 !important; }
+    .evt-input { background: #d97706; color: #ffffff; font-weight: 700; border: 2px solid #78350f !important; }
+
+    /* Amount pills — FIXED 130px width so numbers stack in a clean column */
+    .amt-wrap { width: 130px; min-width: 130px; text-align: right; display: inline-block; }
+    .amt-pill { border-radius: 4px; padding: 3px 10px; color: #ffffff; font-weight: 700; display: inline-block; }
+    .amt-in   { background: #16a34a; }
+    .amt-out  { background: #dc2626; }
+    .amt-plan-out, .amt-plan-in { background: #F8FAFC; color: #0F172A; border: 2px dashed #94A3B8; }
+    .amt-input { background: #d97706; border: 2px solid #78350f; }
+
+    /* ---- Check Registry (PDC) chips + drawer ----
+       Chips: light blue bg, dark blue text, 2px solid border; the 🧾 icon
+       is prepended by the JS that builds the chip/card title. */
+    .evt-check { background: #6ba4c9; color: #0369a1; font-weight: 700; border: 2px solid #0369a1 !important; }
+    .amt-check { background: #e0f2fe; color: #0369a1; border: 2px solid #0369a1; }
+
+    .chk-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    .chk-overdue { border-left: 4px solid #B42318; background: #FEF7F6; }   /* past Target Date */
+    .chk-dup { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: #FEF3C7; color: #92400E; }
+    .chk-batch { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: #e0f2fe; color: #0369a1; }
+    .chk-bounced { border-left: 4px solid #334155; background: #F8FAFC; }   /* bounced: black/gray indicator */
+    .chk-bounce-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: #1F2937; color: #fff; letter-spacing: .05em; }
+
+    /* Persistent end-of-day balance footer */
+    .bal-footer {
+      margin-top: auto;   /* pushes footer to the absolute bottom of the frame */
+      font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums;
+      font-size: 11px; font-weight: 600; color: #0F172A; background: #F8FAFC;
+      border-top: 1px solid #E2E8F0; padding: 3px 6px; text-align: right;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bal-footer .bal-label { font-size: 9px; letter-spacing: .06em; color: #64748B; font-weight: 600; margin-right: 4px; }
+    .cash-dry { background: var(--dry-bg) !important; }
+    .cash-dry .bal-footer { background: var(--dry); color: #fff; border-top-color: var(--dry); }
+    .cash-dry .bal-footer .bal-label { color: #FECACA; }
+
+    .card-label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #98A2B3; font-weight: 600; }
+
+    dialog::backdrop { background: rgba(16,24,40,.55); }
+    dialog { border: none; border-radius: 12px; padding: 0; max-width: 750px; width: 92vw; max-height: 95vh; }
+    dialog > div { max-height: 95vh; overflow-y: auto; }
+    dialog#dayModal { max-width: 850px; }
+    dialog.bulk { max-width: 1100px; }
+
+    .field { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 14px; background:#fff; }
+    .field:focus { outline: 2px solid var(--ink); outline-offset: 0; border-color: var(--ink); }
+
+    /* ---------- Batch Planner grid (the mobile 'squish' fix) ----------
+       The grid lives inside an overflow-x-auto wrapper; the table itself
+       has a hard min-width and every column a min-width, so on a phone
+       you swipe horizontally instead of watching the inputs collapse. */
+    .bulk-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .bulk-grid { min-width: 1000px; width: 100%; }
+    .bulk-grid th, .bulk-grid td { min-width: 140px; }
+    .bulk-grid th:first-child,  .bulk-grid td:first-child  { min-width: 28px; width: 28px; }
+    .bulk-grid th:nth-child(6), .bulk-grid td:nth-child(6) { min-width: 110px; }
+    .bulk-grid th:last-child,   .bulk-grid td:last-child   { min-width: 28px; width: 28px; }
+    .bulk-grid td { padding: 3px 4px 3px 0; vertical-align: middle; }
+    .bulk-grid th { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: #98A2B3; text-align: left; padding: 0 4px 4px 0; font-weight: 600; white-space: nowrap; }
+    .bulk-grid .field { padding: 6px 8px; font-size: 13px; }
+    .trace-preview { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #94A3B8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 100%; }
+
+    /* ---------- Segmented Calendar | List switch ---------- */
+    .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+    .seg button { padding: 6px 14px; font-size: 13px; font-weight: 600; color: #667085; }
+    .seg button.on { background: var(--ink); color: #fff; }
+
+/* ---------- Main List View table ---------- */
+    .list-table { 
+      table-layout: fixed; /* Strictly enforces column widths */
+      width: 100%; 
+      border-collapse: collapse; 
+      font-size: 13px; 
+      min-width: 1400px; /* Increased to allow wide columns to breathe */
+    }
+    
+    .list-table th { 
+      position: sticky; top: 0; background: #F9FAFB; z-index: 5; 
+      text-align: left; font-size: 10px; letter-spacing: .07em; 
+      text-transform: uppercase; color: #98A2B3; font-weight: 600; 
+      padding: 8px 10px; border-bottom: 2px solid var(--line); 
+      white-space: nowrap; 
+    }
+    
+    .list-table td { 
+      padding: 7px 10px; border-bottom: 1px solid var(--line); 
+      vertical-align: top; 
+      white-space: nowrap;      /* Keep everything on one line */
+      overflow: hidden;         /* Hide overflow */
+      text-overflow: ellipsis;  /* Show '...' for long text */
+    }
+
+    /* Assigning your requested widths */
+    .list-table th:nth-child(1), .list-table td:nth-child(1) { width: 100px; } /* Date */
+    .list-table th:nth-child(2), .list-table td:nth-child(2) { width: 90px;  } /* State */
+    .list-table th:nth-child(3), .list-table td:nth-child(3) { width: 230px; } /* Trace */
+    .list-table th:nth-child(4), .list-table td:nth-child(4) { width: 160px; } /* Category */
+    .list-table th:nth-child(5), .list-table td:nth-child(5) { width: 180px; } /* Beneficiary */
+    .list-table th:nth-child(6), .list-table td:nth-child(6) { width: 180px; } /* Recipient */
+    .list-table th:nth-child(7), .list-table td:nth-child(7) { width: 350px; } /* Details (Extra Wide) */
+    .list-table th:nth-child(8), .list-table td:nth-child(8) { width: 120px; } /* Withdrawal */
+    .list-table th:nth-child(9), .list-table td:nth-child(9) { width: 120px; } /* Deposit */
+    .list-table th:nth-child(10), .list-table td:nth-child(10) { width: 140px; } /* Balance */
+
+    .list-table tbody tr { cursor: pointer; }
+    .list-table tbody tr:hover { background: #F8FAFC; }
+    .list-table .num { text-align: right; font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    
+    .st-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+    .st-planned  { background: #F8FAFC; color: #0F172A; border: 1.5px dashed #94A3B8; }
+    .st-inputted { background: #d97706; color: #fff; }
+    .st-settled  { background: #16a34a; color: #fff; }
+
+    /* ---------- Backlog drawer ---------- */
+    #drawerOverlay { position: fixed; inset: 0; background: rgba(16,24,40,.45); z-index: 40; }
+    #drawer {
+      position: fixed; top: 0; right: 0; height: 100%; width: 400px; max-width: 92vw;
+      background: #fff; box-shadow: -8px 0 30px rgba(16,24,40,.18); z-index: 50;
+      transform: translateX(100%); transition: transform .25s ease; display: flex; flex-direction: column;
+    }
+    #drawer.open { transform: translateX(0); }
+    .bl-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: grab; }
+    .bl-item:active { cursor: grabbing; }
+    .bl-item.sortable-ghost { opacity: .4; background: #EFF4FF; }
+    .bl-overdue { background: #FEF2F2; border-color: #FCA5A5; }
+    .prio-High { background: #FEE2E2; color: #991B1B; }
+    .prio-Med, .prio-Medium { background: #FEF3C7; color: #92400E; }
+    .prio-Low { background: #F1F5F9; color: #475467; }
+
+    /* ---------- Day-modal rows: ⋯ More Options menu + trace footer ---------- */
+    .more-wrap { position: relative; }
+    .more-menu {
+      position: absolute; right: 0; top: calc(100% + 4px); z-index: 30;
+      background: #fff; border: 1px solid var(--line); border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(16,24,40,.14); min-width: 170px; padding: 4px;
+    }
+    .more-menu button { display: block; width: 100%; text-align: left; font-size: 13px; padding: 7px 10px; border-radius: 6px; }
+    .more-menu button:hover { background: #F1F5F9; }
+    .row-trace { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #94A3B8; margin-top: 3px; }
+    .row-main { cursor: pointer; }
+    .row-main:hover .row-head { text-decoration: underline; text-decoration-color: #CBD5E1; }
+    .detail-field p.val { font-size: 14px; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+
+    .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spin { animation: none; } #drawer { transition: none; } }
+
+    /* ---------- Mobile refinements ---------- */
+    @media (max-width: 640px) {
+      .fc .fc-event { font-size: 9px; padding: 1px 3px; margin: 1px; }
+      .evt-in, .evt-out, .evt-plan-out, .evt-plan-in, .evt-input, .evt-check { font-weight: 400; }  /* no bolding on mobile chips */
+      .fc .fc-daygrid-day-frame { min-height: 88px; padding: 2px 2px 0; }
+      .fc .fc-daygrid-day-number { font-size: 11px; padding: 2px 4px; }
+      .bal-footer { font-size: 9px; padding: 2px 3px; }
+      .bal-footer .bal-label { display: none; }
+      .fc .fc-toolbar-title { font-size: .9rem; }
+      #calendar { min-height: 640px; }
+      .amt-wrap { width: 110px; min-width: 110px; }
+      /* Every modal takes the full phone width */
+      dialog, dialog.bulk, dialog#dayModal { width: 95vw; max-width: 95vw; }
+      /* Day-modal: keep the Category • Beneficiary title unobscured — hide
+         subtext by default and stack the action buttons vertically */
+      .row-sub { display: none; }
+      .day-row { flex-direction: column; align-items: stretch; }
+      .row-actions { flex-direction: column; align-items: stretch; margin-top: 6px; }
+      .row-actions > * { width: 100%; text-align: center; }
+      .row-actions .amt-wrap { width: 100%; text-align: center; }
+      .list-table { min-width: 900px; }
+    }
+
+    /* ---------- Secure Login Gate ---------- */
+    #loginOverlay {
+      position: fixed; inset: 0; background: #101828; z-index: 100;
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .login-card {
+      width: 100%; max-width: 400px; background: #1F2937; border: 1px solid #374151;
+      border-radius: 16px; padding: 28px; box-shadow: 0 24px 60px rgba(0,0,0,.45);
+    }
+    .login-card .lfield {
+      width: 100%; border: 1px solid #4B5563; border-radius: 8px; padding: 10px 12px;
+      font-size: 14px; background: #111827; color: #F9FAFB;
+    }
+    .login-card .lfield:focus { outline: 2px solid #93C5FD; outline-offset: 0; border-color: #93C5FD; }
+    .login-card .lfield::placeholder { color: #6B7280; }
+    .donut {
+      width: 16px; height: 16px; border: 3px solid rgba(255,255,255,.3); border-top-color: #fff;
+      border-radius: 50%; animation: spin 1s linear infinite; display: inline-block; vertical-align: -3px;
+    }
+    /* ---------- Responsive layout ----------
+       >1700px : one-row header, identity pinned at window edge (untouched).
+       ≤1700px : deterministic two-row header — title row (brand left,
+                 identity top-right) + full-width RIGHT-ALIGNED controls row.
+       ≤900px  : controls compress to one compact scrollable row.
+                 ('Low-cash warning below' label hides at <640px via its own
+                 Tailwind sm:flex class — same moment the input hides.)
+       ≤800px  : views bar: buttons row on top, truly full-width search below.
+       ≤640px  : mobile — equal-width header buttons and views controls
+                 spanning edge-to-edge, centered card amounts at 19px. */
+    .btn-mini { display: none; }
+
+    @media (max-width: 1700px) {
+      header > .max-w-7xl { flex-direction: column; align-items: flex-start; }
+      #headerControls { width: 100%; justify-content: flex-end; }
+      #identityGroup { top: 18px; right: 24px; transform: none; }
+      #welcomeUser { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+    }
+
+    @media (max-width: 900px) {
+      #headerControls { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+      #headerControls::-webkit-scrollbar { display: none; }
+      #headerControls button { font-size: 12px; padding: 6px 9px; white-space: nowrap; flex: 0 0 auto; }
+      #headerControls #thresholdInput { width: 90px; flex: 0 0 auto; }
+      .btn-full { display: none; }
+      .btn-mini { display: inline; }
+    }
+
+    @media (max-width: 800px) {
+      #viewControls { row-gap: 8px; }
+      #searchWrap { flex: 1 1 100%; min-width: 100%; }
+      #searchWrap > div:first-child { max-width: 100%; }   /* lift the desktop max-w-md cap */
+    }
+
+    @media (max-width: 640px) {
+      .sbd-tag { display: none; }
+      #identityGroup { top: 14px; right: 12px; gap: 8px; }
+      #identityGroup #welcomeUser { font-size: 12px; }
+      #identityGroup #logoutBtn { font-size: 12px; padding: 4px 10px; border-width: 1.5px; }
+      header h1 { font-size: 16px; max-width: calc(100vw - 210px); }
+
+      #headerControls button { flex: 1 1 0; padding: 6px 4px; text-align: center; }
+      #headerControls #thresholdInput { display: none; }
+
+      section .grid > div { padding: 12px; }
+      section .card-label { font-size: 10px; letter-spacing: .05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #sumBalance, #sumOut30, #sumIn30, #sumEOM { font-size: 19px; white-space: nowrap; text-align: center; }
+      #sumBalanceAsOf, #sumOut30n, #sumIn30n, #sumEOMNote { text-align: center; }
+
+      #viewControls .seg { flex: 1 1 auto; display: inline-flex; }
+      #viewControls .seg button { flex: 1 1 auto; font-size: 12px; padding: 4px 7px; text-align: center; }
+      #viewControls > select { flex: 1 1 auto; font-size: 12px; padding: 4px 6px; text-align: center; text-align-last: center; }
+      #viewControls > button { flex: 1 1 auto; font-size: 12px; padding: 4px 8px; white-space: nowrap; text-align: center; }
+    }
+
+    @media (max-width: 400px) {
+      header h1 { font-size: 15px; }
+      #identityGroup #welcomeUser { font-size: 11px; }
+      #sumBalance, #sumOut30, #sumIn30, #sumEOM { font-size: 17px; }
+    }
+    /* ---------- Calendar legend & mobile cell density ---------- */
+    @media (max-width: 640px) {
+      #calLegend > span { flex: 1 1 100%; }   /* one legend item per row */
+      .bal-note2 { display: block; }           /* BAL explainer wraps to its own line */
+      .fc .fc-event { padding: 1px 3px; margin: 0 1px 1px; line-height: 1.15; }
+      .fc .fc-daygrid-day-frame { min-height: 70px; padding: 2px 2px 0; }
+      #calendar { min-height: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ================= SECURE LOGIN GATE (dark-mode overlay) ================= -->
+  <div id="loginOverlay">
+    <div class="login-card">
+      <h1 class="text-lg font-semibold text-white tracking-tight">DELCAN Cashflow Intelligence</h1>
+      <p class="text-xs text-slate-400 mt-0.5 mb-5">Financial Command Center · Secure Access</p>
+
+      <div class="flex rounded-lg border border-[#4B5563] overflow-hidden text-sm font-semibold mb-4">
+        <button id="tabLogin" class="flex-1 py-2 bg-white text-[#101828]">Sign In</button>
+        <button id="tabRegister" class="flex-1 py-2 bg-transparent text-slate-400 hover:text-white">Request Access</button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="card-label !text-slate-400">Username</label>
+          <input id="lgUser" class="lfield mt-1" autocomplete="username" placeholder="your.username">
+        </div>
+        <div>
+          <label class="card-label !text-slate-400">Password</label>
+          <input id="lgPass" type="password" class="lfield mt-1" autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <div id="lgNameWrap" class="hidden">
+          <label class="card-label !text-slate-400">Display Name</label>
+          <input id="lgName" class="lfield mt-1" placeholder="e.g. Josh de Leon">
+        </div>
+      </div>
+
+      <p id="lgError" class="hidden text-sm text-[#f87171] mt-3"></p>
+      <p id="lgOk" class="hidden text-sm text-[#4ade80] mt-3"></p>
+
+      <button id="lgSubmit" class="w-full mt-5 rounded-lg bg-white text-[#101828] py-2.5 text-sm font-bold hover:bg-slate-200 disabled:opacity-60">
+        <span id="lgSpin" class="donut hidden" style="border-color:rgba(16,24,40,.25);border-top-color:#101828"></span>
+        <span id="lgSubmitLabel">Sign In</span>
+      </button>
+
+      <p id="lgHint" class="text-[11px] text-slate-500 mt-4 text-center">Sessions expire after 15 minutes of inactivity. Passwords are hashed server-side — never stored or transmitted for reading in plain text.</p>
+    </div>
+  </div>
+
+  <!-- ================= HEADER ================= -->
+  <header class="bg-[#101828] text-white w-full relative">
+    <!-- Brand + controls share the SAME max-w-7xl container as the calendar,
+         so everything lines up with the content below. The identity group is
+         absolutely pinned to the window's far-right edge, outside that
+         container, so its position is independent and untouched. -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3 flex-wrap">
+      <div>
+        <h1 class="text-lg font-semibold tracking-tight">DELCAN Cashflow Intelligence</h1>
+        <p class="text-xs text-slate-400 mt-0.5">Financial Command Center<span class="sbd-tag"> · Security Bank Disbursement</span></p>
+      </div>
+      <div id="headerControls" class="flex items-center gap-2 sm:gap-3 flex-wrap">
+        <label class="hidden sm:flex items-center gap-2 text-xs text-slate-300">
+          <span class="lcw-text">Low-cash warning below</span>
+          <input id="thresholdInput" type="number" min="0" step="1000"
+                 class="mono w-28 rounded-md bg-slate-800 border border-slate-700 px-2 py-1 text-right text-white">
+        </label>
+        <button id="checksBtn" class="relative rounded-md border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800">
+          🧾 Checks <span id="checksCount" class="ml-1 mono text-xs bg-slate-700 rounded px-1.5 py-0.5">0</span>
+        </button>
+        <button id="backlogBtn" class="relative rounded-md border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800">
+          Backlog <span id="backlogCount" class="ml-1 mono text-xs bg-slate-700 rounded px-1.5 py-0.5">0</span>
+        </button>
+        <button id="refreshBtn" class="rounded-md border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800">↻ Refresh</button>
+        <button id="addBtn" class="rounded-md bg-white text-[#101828] px-3 py-1.5 text-sm font-semibold hover:bg-slate-200"><span class="btn-full">+ Plan transaction</span><span class="btn-mini">+ Plan</span></button>
+      </div>
+    </div>
+    <!-- FAR-RIGHT identity group: pinned to the window edge, vertically centered -->
+    <div id="identityGroup" class="absolute right-4 sm:right-6 top-1/2 -translate-y-1/2 flex items-center gap-3">
+      <span id="welcomeUser" class="text-sm text-white whitespace-nowrap"></span>
+      <button id="logoutBtn" class="rounded-md border-2 border-[#dc2626] text-[#fca5a5] hover:bg-[#dc2626] hover:text-white px-3 py-1.5 text-sm font-semibold transition">Logout</button>
+    </div>
+  </header>
+
+  <!-- ================= SUMMARY BAR ================= -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 -mb-2 mt-5">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="bg-white rounded-xl border border-[#E4E7EC] p-4">
+        <p class="card-label">Liquid cash (settled)</p>
+        <p id="sumBalance" class="mono text-2xl font-semibold mt-1">—</p>
+        <p id="sumBalanceAsOf" class="text-xs text-slate-400 mt-1"></p>
+      </div>
+      <div id="cardOut" class="bg-white rounded-xl border border-[#E4E7EC] p-4 cursor-pointer hover:ring-2 hover:ring-[#B54708]/30 transition" title="Click for a categorized breakdown">
+        <p class="card-label">Upcoming outflows · 30d ↗</p>
+        <p id="sumOut30" class="mono text-2xl font-semibold mt-1 text-[#B54708]">—</p>
+        <p id="sumOut30n" class="text-xs text-slate-400 mt-1"></p>
+      </div>
+      <div id="cardIn" class="bg-white rounded-xl border border-[#E4E7EC] p-4 cursor-pointer hover:ring-2 hover:ring-[#067647]/30 transition" title="Click for a categorized breakdown">
+        <p class="card-label">Expected inflows · 30d ↗</p>
+        <p id="sumIn30" class="mono text-2xl font-semibold mt-1 text-[#067647]">—</p>
+        <p id="sumIn30n" class="text-xs text-slate-400 mt-1"></p>
+      </div>
+      <div class="bg-white rounded-xl border border-[#E4E7EC] p-4">
+        <p class="card-label">Projected end of month</p>
+        <p id="sumEOM" class="mono text-2xl font-semibold mt-1">—</p>
+        <p id="sumEOMNote" class="text-xs text-slate-400 mt-1"></p>
+      </div>
+    </div>
+    <p id="dryWarning" class="hidden mt-3 rounded-lg bg-[#FEE4E2] text-[#B42318] text-sm px-4 py-2 font-medium"></p>
+  </section>
+
+  <!-- ================= MAIN ================= -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+    <div id="loading" class="flex items-center gap-3 text-slate-500 text-sm py-16 justify-center">
+      <svg class="spin h-5 w-5" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity=".2"/><path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+      Loading ledger…
+    </div>
+
+    <div id="mainWrap" class="hidden">
+      <!-- Command Center control bar: view switch + search + advanced filters -->
+      <div class="bg-white rounded-xl border border-[#E4E7EC] p-2.5 mb-3">
+        <div id="viewControls" class="flex items-center gap-2 flex-wrap">
+          <div class="seg">
+            <button id="segCal" class="on">📅 Calendar</button>
+            <button id="segList">☰ List View</button>
+          </div>
+          <select id="viewSelect" class="field !w-auto text-sm py-1.5" title="Calendar granularity & analytics period">
+            <option value="month">Month View</option>
+            <option value="year">Year View</option>
+          </select>
+          <button id="analyticsToggle" class="rounded-md border border-[#E4E7EC] bg-white shadow-sm px-3 py-1.5 text-sm font-semibold text-[#101828] hover:bg-slate-50">📊 Analytics</button>
+          <div id="searchWrap" class="flex items-center gap-1.5 flex-1 min-w-[200px] justify-end">
+            <div class="relative flex-1 max-w-md">
+              <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">🔍</span>
+              <input id="searchInput" placeholder="Search... (Trace #, beneficiary, details)"
+                     class="field !py-1.5 !pl-8 text-sm w-full">
+            </div>
+            <button id="filterBtn" title="Advanced filters"
+                    class="relative rounded-md border border-[#E4E7EC] bg-white shadow-sm px-3 py-1.5 text-sm hover:bg-slate-50">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="inline-block align-middle text-slate-600"><path d="M3 5h18l-7 8v5l-4 2v-7L3 5z" stroke-linejoin="round"/></svg>
+              <span id="filterDot" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#B54708]"></span>
+            </button>
+          </div>
+        </div>
+        <!-- Advanced Filter panel -->
+        <div id="filterPanel" class="hidden mt-2.5 pt-2.5 border-t border-[#E4E7EC]">
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <div>
+              <label class="card-label">From</label>
+              <input id="fltFrom" type="date" class="field !py-1.5 text-sm mt-0.5">
+            </div>
+            <div>
+              <label class="card-label">To</label>
+              <input id="fltTo" type="date" class="field !py-1.5 text-sm mt-0.5">
+            </div>
+            <div>
+              <label class="card-label">Category</label>
+              <select id="fltCategory" class="field !py-1.5 text-sm mt-0.5"><option value="">All</option></select>
+            </div>
+            <div>
+              <label class="card-label">Type</label>
+              <select id="fltType" class="field !py-1.5 text-sm mt-0.5">
+                <option value="">All</option>
+                <option>Direct</option><option>Transfer</option><option>Reimbursement</option>
+                <option>Deposit</option><option>Intercompany</option><option>Cash Advance</option>
+              </select>
+            </div>
+            <div>
+              <label class="card-label">Min ₱</label>
+              <input id="fltMin" type="number" min="0" step="0.01" placeholder="0" class="field mono !py-1.5 text-sm mt-0.5 text-right">
+            </div>
+            <div>
+              <label class="card-label">Max ₱</label>
+              <input id="fltMax" type="number" min="0" step="0.01" placeholder="∞" class="field mono !py-1.5 text-sm mt-0.5 text-right">
+            </div>
+          </div>
+          <div class="flex justify-between items-center mt-2">
+            <p id="fltCount" class="text-xs text-slate-400"></p>
+            <button id="fltClear" class="text-xs font-semibold text-slate-500 hover:text-[#B42318]">Clear all filters</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ VIEW 1: CALENDAR ============ -->
+      <div id="calendarWrap" class="bg-white rounded-xl border border-[#E4E7EC] p-3 sm:p-4">
+        <div id="calendar"></div>
+        <div id="calLegend" class="flex flex-wrap gap-x-4 gap-y-2 mt-3 pt-3 border-t border-[#E4E7EC] text-xs text-slate-600">
+          <span><span class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background:#999999;border:2px dashed #94A3B8"></span><b class="text-slate-900">◇ Planned</b> — not yet in the bank app</span>
+          <span><span class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background:#d97706;border:2px solid #78350f"></span><b style="color:#d97706">◆ Inputted</b> — in the bank, awaiting approval</span>
+          <span><span class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background:#16a34a"></span><b style="color:#16a34a">Settled inflow</b></span>
+          <span><span class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background:#dc2626"></span><b style="color:#dc2626">Settled outflow</b></span>
+          <span><span class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background:#e0f2fe;border:2px solid #0369a1"></span><b style="color:#0369a1">🧾 Check (PDC)</b> — pending post-dated check due</span>
+          <span><span class="inline-block w-3 h-3 rounded-sm align-middle mr-1" style="background:var(--dry-bg);border:1px solid var(--dry)"></span><b class="text-[#B42318]">Cash-dry day</b> — projected balance below threshold</span>
+          <span class="mono text-slate-700"><b>BAL: ₱XX,XXX</b> footer = end-of-day balance <span class="bal-note2">(actual for past dates, projected for today onward)</span></span>
+        </div>
+      </div>
+
+      <!-- ============ VIEW 2: LIST (table) ============ -->
+      <div id="listWrap" class="hidden bg-white rounded-xl border border-[#E4E7EC] p-3 sm:p-4">
+        <!-- ADDED: NAVIGATION BAR FOR LIST VIEW -->
+        <div class="flex items-center justify-between mb-4 pb-2 border-b border-[#E4E7EC]">
+          <div class="flex items-center gap-2">
+            <button id="listPrev" class="rounded-md border border-[#E4E7EC] px-3 py-1 text-sm hover:bg-slate-50 transition">‹</button>
+            <span id="listTitle" class="text-sm font-bold min-w-[140px] text-center uppercase tracking-tight text-slate-700"></span>
+            <button id="listNext" class="rounded-md border border-[#E4E7EC] px-3 py-1 text-sm hover:bg-slate-50 transition">›</button>
+          </div>
+          <div class="text-right">
+            <p id="listCount" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest"></p>
+          </div>
+        </div>
+        <!-- END NAVIGATION BAR -->
+
+        <div class="overflow-x-auto" style="max-height:70vh; overflow-y:auto;">
+          <table class="list-table">
+            <thead>
+              <tr>
+                <th>Date</th><th>State</th><th>Trace Number</th><th>Category</th><th>Beneficiary</th>
+                <th>Recipient</th><th>Details</th><th class="num">Withdrawal</th><th class="num">Deposit</th><th class="num">Current Balance</th>
+              </tr>
+            </thead>
+            <tbody id="listBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ VIEW 3: ANALYTICS ============ -->
+      <div id="analyticsWrap" class="hidden bg-white rounded-xl border border-[#E4E7EC] p-4">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 class="text-base font-semibold">Analytics</h2>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button id="anPrev" class="rounded-md border border-[#E4E7EC] px-2.5 py-1 text-sm">‹</button>
+            <span id="anPeriod" class="text-sm font-semibold min-w-[140px] text-center"></span>
+            <button id="anNext" class="rounded-md border border-[#E4E7EC] px-2.5 py-1 text-sm">›</button>
+            <button id="dlReport" class="rounded-md border border-[#E4E7EC] bg-white shadow-sm px-3 py-1 text-sm font-semibold hover:bg-slate-50">⭳ Download Report</button>
+          </div>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-6">
+          <div>
+            <p class="card-label mb-2">Income vs Expenses — <span id="anTrendLabel"></span></p>
+            <div class="relative h-80"><canvas id="trendChart"></canvas></div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <p class="card-label"><span id="anCatMode">Expense</span> Category Breakdown — <span id="anCatLabel"></span></p>
+              <div class="flex rounded-md border border-[#E4E7EC] overflow-hidden text-xs font-semibold">
+                <button id="catModeExp" class="px-2.5 py-1 bg-[#101828] text-white">Expenses</button>
+                <button id="catModeInc" class="px-2.5 py-1 bg-white text-slate-500 hover:bg-slate-50">Income</button>
+              </div>
+            </div>
+            <div class="relative h-80"><canvas id="catChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ================= BACKLOG DRAWER ================= -->
+  <div id="drawerOverlay" class="hidden"></div>
+  <aside id="drawer">
+    <div class="p-4 border-b border-[#E4E7EC] flex items-center justify-between">
+      <div>
+        <h2 class="text-base font-semibold">Backlog</h2>
+        <p class="text-xs text-slate-400">Long-term payables &amp; receivables waiting for a slot</p>
+      </div>
+      <button id="drawerClose" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+    </div>
+    <div class="px-4 py-2 border-b border-[#E4E7EC] flex items-center gap-2">
+      <label class="card-label">Sort</label>
+      <select id="backlogSort" class="field !w-auto text-sm py-1">
+        <option value="manual">Manual order</option>
+        <option value="priority">Priority</option>
+        <option value="date">Due Date</option>
+      </select>
+      <span id="dragHint" class="text-[10px] text-slate-400">drag cards to reorder</span>
+      <button id="blAddEntry" class="ml-auto rounded-md bg-[#101828] text-white px-2.5 py-1 text-xs font-semibold hover:bg-slate-700">＋ Add Entry</button>
+    </div>
+    <div id="backlogList" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
+  </aside>
+
+  <!-- ================= CHECK REGISTRY (PDC) DRAWER ================= -->
+  <aside id="checksDrawer" style="position:fixed;top:0;right:0;height:100%;width:420px;max-width:92vw;background:#fff;box-shadow:-8px 0 30px rgba(16,24,40,.18);z-index:50;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;">
+    <div class="p-4 border-b border-[#E4E7EC] flex items-center justify-between">
+      <div>
+        <h2 class="text-base font-semibold">🧾 Check Registry</h2>
+        <p class="text-xs text-slate-400">Pending PDCs due in the next 30 days (overdue in red)</p>
+      </div>
+      <button id="checksDrawerClose" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+    </div>
+    <div class="px-4 py-2 border-b border-[#E4E7EC] flex items-center gap-2">
+      <label class="card-label">Batch</label>
+      <select id="chkBatchFilter" class="field !w-auto text-sm py-1 flex-1">
+        <option value="">All batches</option>
+      </select>
+    </div>
+    <div id="checksList" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
+  </aside>
+
+  <!-- ================= ADD PLANNED MODAL (single + bulk) ================= -->
+  <dialog id="addModal">
+    <div class="p-5">
+      <h2 id="addTitle" class="text-base font-semibold">Add planned transaction</h2>
+      <p id="addSubtitle" class="text-xs text-slate-500 mt-0.5 mb-3">Writes a row to the Ledger. Your running balance is untouched until you settle it.</p>
+
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <button type="button" id="dirOut" class="dir-btn rounded-lg border px-3 py-2 text-sm font-semibold border-[#B54708] bg-[#FFFAEB] text-[#B54708]">Payable (out)</button>
+        <button type="button" id="dirIn"  class="dir-btn rounded-lg border px-3 py-2 text-sm font-semibold border-[#E4E7EC] text-slate-500">Receivable (in)</button>
+      </div>
+
+      <!-- ---------- SINGLE MODE ---------- -->
+      <div id="simpleFields" class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="card-label">Date</label>
+          <input id="fDate" type="date" class="field mt-1">
+        </div>
+        <div>
+          <label class="card-label">Amount (₱)</label>
+          <input id="fAmount" type="number" min="0" step="0.01" placeholder="0.00" class="field mono mt-1 text-right">
+        </div>
+        <div>
+          <label class="card-label">Beneficiary <span class="normal-case font-normal">(ultimate vendor/purpose)</span></label>
+          <input id="fBeneficiary" list="benList" placeholder="e.g. Petron, Isuzu, Wash It Izzy" class="field mt-1">
+          <datalist id="benList"></datalist>
+        </div>
+        <div>
+          <label class="card-label">Recipient <span class="normal-case font-normal">(receives the transfer)</span></label>
+          <input id="fRecipient" list="recList" placeholder="e.g. Josh de Leon, Deo Bongat" class="field mt-1">
+          <datalist id="recList"></datalist>
+        </div>
+        <div>
+          <label class="card-label">Destination <span class="normal-case font-normal">(auto-fills from history)</span></label>
+          <input id="fDestination" list="destList" placeholder="e.g. GCash, PNB, Security Bank" class="field mt-1">
+          <datalist id="destList"></datalist>
+        </div>
+        <div>
+          <label class="card-label">Account # <span class="normal-case font-normal">(auto-fills from history)</span></label>
+          <input id="fAccount" list="acctList" placeholder="Account / wallet number" class="field mono mt-1">
+          <datalist id="acctList"></datalist>
+        </div>
+        <div>
+          <label class="card-label">Type</label>
+          <select id="fType" class="field mt-1"></select>
+        </div>
+        <div>
+          <label class="card-label">Expense Category</label>
+          <input id="fCategory" list="catList" placeholder="e.g. Outsource Laundry, Abuloy" class="field mt-1">
+          <datalist id="catList"></datalist>
+        </div>
+        <div class="col-span-2">
+          <label class="card-label">Details</label>
+          <input id="fDetails" placeholder="e.g. Diesel, kg @ rate, load count…" class="field mt-1">
+        </div>
+        <div class="col-span-2">
+          <label class="card-label">Trace Number <span class="normal-case font-normal">(auto-suggested — copy into your bank app, edit if needed)</span></label>
+          <div class="flex gap-1.5 mt-1">
+            <input id="fTrace" class="field mono flex-1">
+            <button type="button" id="copyTrace" title="Copy trace number to clipboard"
+                    class="rounded-md border border-[#E4E7EC] px-3 text-xs font-semibold text-slate-600 hover:bg-slate-100 whitespace-nowrap">⧉ Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- BULK MODE: BATCH PLANNER ---------- -->
+      <div id="bulkFields" class="hidden">
+        <div class="rounded-lg border border-[#E4E7EC] bg-[#F9FAFB] p-3">
+          <p class="card-label mb-2">Shared header — applies to all rows</p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="card-label">Transaction Date</label>
+              <input id="bDate" type="date" class="field mt-1">
+            </div>
+            <div>
+              <label class="card-label">Reference Date <span class="normal-case font-normal">(for trace no.)</span></label>
+              <input id="bRefDate" type="date" class="field mt-1">
+            </div>
+            <div>
+              <label class="card-label">Default Recipient</label>
+              <input id="bRecipient" list="recList" placeholder="Common receiving account" class="field mt-1">
+            </div>
+            <div>
+              <label class="card-label">Default Destination</label>
+              <input id="bDestination" list="destList" placeholder="e.g. GCash, PNB" class="field mt-1">
+            </div>
+            <div>
+              <label class="card-label">Default Account #</label>
+              <input id="bAccount" list="acctList" placeholder="Common account no." class="field mono mt-1">
+            </div>
+            <div>
+              <label class="card-label">Type</label>
+              <select id="bType" class="field mt-1"></select>
+            </div>
+            <div>
+              <label class="card-label">Expense Category</label>
+              <input id="bCategory" list="catList" placeholder="Pick existing or type a new one" class="field mt-1">
+            </div>
+            <div>
+              <label class="card-label">Group Tag <span class="normal-case font-normal">(builds trace no.)</span></label>
+              <input id="bTag" placeholder="e.g. PAYROLL, Outsource Laundry" class="field mt-1">
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="card-label">Period start</label>
+                <input id="bStart" type="date" class="field mt-1">
+              </div>
+              <div>
+                <label class="card-label">Period end</label>
+                <input id="bEnd" type="date" class="field mt-1">
+              </div>
+            </div>
+          </div>
+          <p class="text-xs text-slate-500 mt-2">Trace pattern: <span id="bTracePattern" class="trace-preview font-semibold text-slate-700">—</span></p>
+        </div>
+
+        <!-- The 'squish' fix: horizontal swipe container + hard column min-widths -->
+        <div class="bulk-scroll mt-3 max-h-72 overflow-y-auto">
+          <table class="bulk-grid">
+            <thead>
+              <tr><th>#</th><th>Beneficiary</th><th>Recipient (Override)</th><th>Destination (Override)</th><th>Account # (Override)</th><th>Amount (₱)</th><th>Details</th><th>Trace Preview</th><th></th></tr>
+            </thead>
+            <tbody id="bulkBody"></tbody>
+          </table>
+        </div>
+        <div class="flex items-center justify-between mt-2 flex-wrap gap-2">
+          <button type="button" id="bulkAddRow" class="text-sm text-slate-600 border border-dashed border-[#98A2B3] rounded px-3 py-1.5 hover:bg-slate-50">+ Add row</button>
+          <p class="text-xs text-slate-400">Tip: <b>Tab</b> in the last Details cell adds a row · swipe sideways on mobile to reach all columns.</p>
+        </div>
+      </div>
+
+      <p id="formError" class="hidden text-sm text-[#B42318] mt-3"></p>
+      <div class="flex justify-between items-center gap-2 mt-5 flex-wrap">
+        <button id="bulkToggle" class="rounded-md border border-[#101828] px-4 py-2 text-sm font-semibold text-[#101828] hover:bg-slate-100">⊞ Bulk Mode</button>
+        <div class="flex gap-2">
+          <button id="cancelAdd" class="rounded-md border border-[#E4E7EC] px-4 py-2 text-sm">Cancel</button>
+          <button id="saveAdd" class="rounded-md bg-[#101828] text-white px-4 py-2 text-sm font-semibold">Save to Ledger</button>
+          <button id="saveBulk" class="hidden rounded-md bg-[#101828] text-white px-4 py-2 text-sm font-semibold">Save batch</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ================= SETTLE CONFIRMATION MODAL ================= -->
+  <dialog id="settleModal">
+    <div class="p-5">
+      <h2 class="text-base font-semibold">Settle transaction</h2>
+      <p id="sPayee" class="text-sm font-medium mt-1"></p>
+      <p id="sPlanned" class="mono text-xs text-slate-500 mt-0.5 mb-4"></p>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="card-label">Settle date</label>
+          <input id="sDate" type="date" class="field mt-1">
+        </div>
+        <div>
+          <label class="card-label">Final amount (₱)</label>
+          <input id="sAmount" type="number" min="0" step="0.01" class="field mono mt-1 text-right">
+        </div>
+        <div>
+          <label class="card-label">Beneficiary</label>
+          <input id="sBeneficiary" list="benList" class="field mt-1">
+        </div>
+        <div>
+          <label class="card-label">Recipient</label>
+          <input id="sRecipient" list="recList" class="field mt-1">
+        </div>
+        <div>
+          <label class="card-label">Type</label>
+          <select id="sType" class="field mt-1">
+            <option value="Direct">Direct</option>
+            <option value="Transfer">Transfer</option>
+            <option value="Reimbursement">Reimbursement</option>
+            <option value="Deposit">Deposit</option>
+            <option value="Intercompany">Intercompany</option>
+            <option value="Cash Advance">Cash Advance</option>
+          </select>
+        </div>
+        <div>
+          <label class="card-label">Trace / Check No.</label>
+          <input id="sTrace" placeholder="Blank clears the PLANNED_ tag" class="field mono mt-1">
+        </div>
+        <div>
+          <label class="card-label">Expense Category</label>
+          <input id="sCategory" list="catList" class="field mt-1">
+        </div>
+        <div>
+          <label class="card-label">Details</label>
+          <input id="sDetails" class="field mt-1">
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-400 mt-3">Settling checks the transaction off, files it into chronological order in your ledger, and rebuilds the running balance automatically.</p>
+      <p id="settleError" class="hidden text-sm text-[#B42318] mt-2"></p>
+      <div class="flex justify-end gap-2 mt-4">
+        <button id="cancelSettle" class="rounded-md border border-[#E4E7EC] px-4 py-2 text-sm">Cancel</button>
+        <button id="saveSettle" class="rounded-md bg-[#16a34a] text-white px-4 py-2 text-sm font-semibold hover:bg-[#15803d]">Confirm &amp; settle</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ================= DAY DETAIL MODAL (Action Hub) ================= -->
+  <dialog id="dayModal">
+    <div class="p-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 id="dayTitle" class="text-base font-semibold"></h2>
+          <p id="dayProj" class="mono text-xs text-slate-500 mt-0.5"></p>
+          <p id="dayFilterNote" class="hidden text-xs text-[#B54708] mt-0.5"></p>
+        </div>
+        <button id="closeDay" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+      </div>
+      <div id="dayList" class="mt-4 max-h-96 overflow-y-auto divide-y divide-[#E4E7EC]"></div>
+      <button id="dayAddBtn" class="mt-4 w-full rounded-md border border-dashed border-[#98A2B3] px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">+ Plan a transaction on this date</button>
+    </div>
+  </dialog>
+
+  <!-- ================= NESTED TRANSACTION DETAIL MODAL ================= -->
+  <dialog id="detailModal">
+    <div class="p-5">
+      <div class="flex items-start justify-between">
+        <div class="min-w-0">
+          <h2 id="dtHead" class="text-base font-semibold break-words"></h2>
+          <p id="dtState" class="text-xs mt-0.5"></p>
+        </div>
+        <button id="closeDetail" class="text-slate-400 hover:text-slate-700 text-xl leading-none shrink-0 ml-3">&times;</button>
+      </div>
+      <div class="mt-3">
+        <span class="amt-wrap"><span id="dtAmt" class="mono text-base amt-pill"></span></span>
+      </div>
+      <div id="dtFields" class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3"></div>
+      <!-- Container reserved for the future 'Upload Receipt' feature -->
+      <div id="dtReceipt" class="mt-5 rounded-lg border-2 border-dashed border-[#E4E7EC] p-4 text-center">
+        <p class="text-sm text-slate-400">📎 Receipt attachments</p>
+        <p class="text-xs text-slate-300 mt-1">Upload Receipt — coming soon</p>
+      </div>
+      <div class="flex justify-end mt-4">
+        <button id="backDetail" class="rounded-md border border-[#E4E7EC] px-4 py-2 text-sm">← Back</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ================= ADD / EDIT BACKLOG ENTRY MODAL ================= -->
+  <dialog id="backlogModal" style="max-width:520px">
+    <div class="p-5">
+      <h2 id="blTitle" class="text-base font-semibold">Add Backlog Entry</h2>
+      <p id="blSubtitle" class="text-xs text-slate-500 mt-0.5 mb-3">Parks a payable/receivable on the Backlog sheet — it stays off the calendar and forecast until you schedule it.</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="card-label">Direction</label>
+          <select id="blDir" class="field mt-1">
+            <option value="out">Payable (out)</option>
+            <option value="in">Receivable (in)</option>
+          </select>
+        </div>
+        <div>
+          <label class="card-label">Amount (₱)</label>
+          <input id="blAmount" type="number" min="0" step="0.01" placeholder="0.00" class="field mono mt-1 text-right">
+        </div>
+        <div>
+          <label class="card-label">Target date <span class="normal-case font-normal">(optional)</span></label>
+          <input id="blDate" type="date" class="field mt-1">
+        </div>
+        <div>
+          <label class="card-label">Priority</label>
+          <select id="blPriority" class="field mt-1">
+            <option>Low</option>
+            <option selected>Med</option>
+            <option>High</option>
+          </select>
+        </div>
+        <div>
+          <label class="card-label">Beneficiary</label>
+          <input id="blBen" list="benList" placeholder="Vendor / purpose" class="field mt-1">
+        </div>
+        <div>
+          <label class="card-label">Expense Category</label>
+          <input id="blCat" list="catList" placeholder="Pick or type new" class="field mt-1">
+        </div>
+        <div class="col-span-2">
+          <label class="card-label">Details</label>
+          <input id="blDet" placeholder="Notes" class="field mt-1">
+        </div>
+      </div>
+      <p id="blError" class="hidden text-sm text-[#B42318] mt-3"></p>
+      <div class="flex justify-end gap-2 mt-4">
+        <button id="cancelBlAdd" class="rounded-md border border-[#E4E7EC] px-4 py-2 text-sm">Cancel</button>
+        <button id="saveBlAdd" class="rounded-md bg-[#101828] text-white px-4 py-2 text-sm font-semibold">Save to Backlog</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ================= DEFER CHECK DATE MODAL ================= -->
+  <dialog id="deferModal" style="max-width:380px">
+    <div class="p-5">
+      <h2 class="text-base font-semibold">📅 Defer Target Deposit Date</h2>
+      <p id="dfInfo" class="text-xs text-slate-500 mt-0.5 mb-3"></p>
+      <label class="card-label">New Target Deposit Date</label>
+      <input id="dfDate" type="date" class="field mt-1">
+      <p id="dfError" class="hidden text-sm text-[#B42318] mt-3"></p>
+      <div class="flex justify-end gap-2 mt-4">
+        <button id="cancelDefer" class="rounded-md border border-[#E4E7EC] px-4 py-2 text-sm">Cancel</button>
+        <button id="saveDefer" class="rounded-md bg-[#101828] text-white px-4 py-2 text-sm font-semibold">Save new date</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ================= BREAKDOWN MODAL (summary drill-down) ================= -->
+  <dialog id="breakdownModal">
+    <div class="p-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 id="bdTitle" class="text-base font-semibold"></h2>
+          <p id="bdSub" class="text-xs text-slate-400 mt-0.5"></p>
+        </div>
+        <button id="closeBd" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+      </div>
+      <div id="bdList" class="mt-4 max-h-96 overflow-y-auto"></div>
+    </div>
+  </dialog>
+
+<script>
+
+/* ==================================================================
+ *  SECURE IDENTITY & SESSION  (mates with Auth.gs)
+ *  Contract: loginUser(user, pass) -> {user, hash, name} | throws
+ *            registerUser(user, pass, displayName) -> ok | throws
+ *  The password travels once, over HTTPS, and is hashed SERVER-SIDE;
+ *  the client only ever stores the session token ('hash') returned
+ *  by the server. localStorage session, 15-minute rolling idle limit.
+ * ================================================================== */
+const AUTH_KEY = 'cfc_session';
+const IDLE_LIMIT_MS = 15 * 60 * 1000;
+let session = null;          // {user, hash, name, ts}
+let lastActivity = Date.now();
+let authMode = 'login';      // 'login' | 'register'
+
+function getAuth() { return session ? { user: session.user, hash: session.hash } : { user: '', hash: '' }; }
+
+function loadStoredSession() {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s.user || !s.hash) return null;
+    if (Date.now() - (s.ts || 0) > IDLE_LIMIT_MS) { localStorage.removeItem(AUTH_KEY); return null; }
+    return s;
+  } catch (e) { return null; }
+}
+
+function persistSession() {
+  if (!session) return;
+  session.ts = Date.now();
+  try { localStorage.setItem(AUTH_KEY, JSON.stringify(session)); } catch (e) {}
+}
+
+function updateWelcome() {
+  const elW = document.getElementById('welcomeUser');
+  if (!elW) return;
+  elW.textContent = session ? 'Welcome, ' + String(session.name || session.user).trim().split(/\s+/)[0] : '';
+}
+
+function setAuthMode(m) {
+  authMode = m;
+  const login = m === 'login';
+  document.getElementById('tabLogin').className = 'flex-1 py-2 ' + (login ? 'bg-white text-[#101828]' : 'bg-transparent text-slate-400 hover:text-white');
+  document.getElementById('tabRegister').className = 'flex-1 py-2 ' + (!login ? 'bg-white text-[#101828]' : 'bg-transparent text-slate-400 hover:text-white');
+  document.getElementById('lgNameWrap').classList.toggle('hidden', login);
+  document.getElementById('lgSubmitLabel').textContent = login ? 'Sign In' : 'Request Access';
+  document.getElementById('lgError').classList.add('hidden');
+  document.getElementById('lgOk').classList.add('hidden');
+}
+
+function showLogin(msg) {
+  document.getElementById('loading').classList.add('hidden');
+  const err = document.getElementById('lgError');
+  if (msg) { err.textContent = msg; err.classList.remove('hidden'); }
+  else err.classList.add('hidden');
+  document.getElementById('loginOverlay').style.display = 'flex';
+}
+function hideLogin() { document.getElementById('loginOverlay').style.display = 'none'; }
+
+function authBusy(on) {
+  document.getElementById('lgSubmit').disabled = on;
+  document.getElementById('lgSpin').classList.toggle('hidden', !on);
+}
+
+function submitAuth() {
+  const u = document.getElementById('lgUser').value.trim();
+  const p = document.getElementById('lgPass').value;
+  const errBox = document.getElementById('lgError');
+  const okBox = document.getElementById('lgOk');
+  errBox.classList.add('hidden'); okBox.classList.add('hidden');
+
+  if (!u || !p) { errBox.textContent = 'Enter a username and password.'; errBox.classList.remove('hidden'); return; }
+
+  authBusy(true);
+  if (authMode === 'login') {
+    google.script.run
+      .withSuccessHandler(res => {
+        authBusy(false);
+        session = { user: res.user, hash: res.hash, name: res.name, ts: Date.now() };
+        persistSession();
+        lastActivity = Date.now();
+        updateWelcome();
+        hideLogin();
+        document.getElementById('lgPass').value = '';
+        loadData();
+      })
+      .withFailureHandler(err => {
+        authBusy(false);
+        errBox.textContent = err.message || 'Username or password incorrect';
+        errBox.classList.remove('hidden');
+      })
+      .loginUser(u, p);   // password hashed server-side in Auth.gs
+  } else {
+    const name = document.getElementById('lgName').value.trim();
+    if (!name) { authBusy(false); errBox.textContent = 'Enter a Display Name for your access request.'; errBox.classList.remove('hidden'); return; }
+    google.script.run
+      .withSuccessHandler(() => {
+        authBusy(false);
+        setAuthMode('login');   // back to Sign In, THEN surface the feedback
+        okBox.textContent = 'Access Requested. Notify Admin for approval.';
+        okBox.classList.remove('hidden');
+      })
+      .withFailureHandler(err => {
+        authBusy(false);
+        errBox.textContent = err.message || 'Could not submit the request.';
+        errBox.classList.remove('hidden');
+      })
+      .registerUser(u, p, name);   // password hashed server-side in Auth.gs
+  }
+}
+
+/* Soft logout: clears storage and resets the UI in place — deliberately
+   NO location.reload() (prevents the blank-page bug in the GAS iframe). */
+function logout(msg) {
+  try { localStorage.removeItem(AUTH_KEY); } catch (e) {}
+  session = null;
+  state = null;
+  document.querySelectorAll('dialog[open]').forEach(d => { try { d.close(); } catch (e) {} });
+  if (typeof closeDrawer === 'function') closeDrawer();
+  if (typeof closeChecksDrawer === 'function') closeChecksDrawer();
+  document.getElementById('mainWrap').classList.add('hidden');
+  updateWelcome();
+  showLogin(msg || '');
+}
+
+function isAuthError(err) {
+  return /not signed in|session expired|log in again|invalid session/i.test((err && err.message) || '');
+}
+
+/* 15-minute inactivity timeout (rolling): activity refreshes the clock;
+   the stored session timestamp is re-persisted at most every 30s. */
+['click', 'keydown', 'mousemove', 'touchstart', 'scroll'].forEach(ev =>
+  document.addEventListener(ev, () => {
+    lastActivity = Date.now();
+    if (session && Date.now() - (session.ts || 0) > 30000) persistSession();
+  }, { passive: true }));
+
+setInterval(() => {
+  if (session && Date.now() - lastActivity > IDLE_LIMIT_MS) {
+    logout('Session expired after 15 minutes of inactivity — please sign in again.');
+  }
+}, 30000);
+
+function bootAuth() {
+  document.getElementById('tabLogin').addEventListener('click', () => setAuthMode('login'));
+  document.getElementById('tabRegister').addEventListener('click', () => setAuthMode('register'));
+  document.getElementById('lgSubmit').addEventListener('click', submitAuth);
+  ['lgUser', 'lgPass', 'lgName'].forEach(id =>
+    document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') submitAuth(); }));
+  document.getElementById('logoutBtn').addEventListener('click', () => logout());
+
+  session = loadStoredSession();
+  if (session) {
+    updateWelcome();
+    hideLogin();
+    loadData();          // server re-verifies; auth failure falls back to the gate
+  } else {
+    showLogin();
+  }
+}
+
+/* ==================================================================
+ *  STATE
+ * ================================================================== */
+let state = null;
+let projection = {};       // today → horizon
+let dailyBalance = {};     // full history + projection
+let calendar = null;
+let calendarDirty = true;  // needs a (re)render next time it becomes visible
+let listDate = null; // This tracks which month/year the List View is looking at
+let direction = 'out';
+let bulkMode = false;
+let traceEdited = false;
+let settleUid = null;
+let activeDay = null;
+let backlogFrom = null;    // {uid,row,ben,amt} when Plan modal came from a Backlog item
+let blEditRef = null;      // null = Add mode; {uid,row,ben,amt} = Edit mode
+let deferCtx = null;
+let baseView = 'calendar'; // 'calendar' | 'list'
+let analyticsOn = false;
+let analyticsDate = null;  // Date object for the analytics period
+let trendChart = null, catChart = null;
+let catMode = 'expense';   // on-screen doughnut mode: 'expense' | 'income'
+let blSortable = null;     // SortableJS instance for the drawer
+const filters = { q: '', from: '', to: '', category: '', type: '', min: '', max: '' };
+const HORIZON_DAYS = 180;
+const TYPES_OUT = ['Direct', 'Transfer', 'Reimbursement', 'Intercompany', 'Cash Advance'];
+const TYPES_IN  = ['Deposit', 'Intercompany'];
+
+const peso = v => '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pesoShort = v => '₱' + Number(v).toLocaleString('en-PH', { maximumFractionDigits: 0 });
+const el = id => document.getElementById(id);
+const norm = v => String(v || '').trim().toLowerCase();
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function localDateKey(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function addDays(iso, n) { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return localDateKey(d); }
+function endOfMonth(iso) { const d = new Date(iso + 'T00:00:00'); return localDateKey(new Date(d.getFullYear(), d.getMonth() + 1, 0)); }
+
+/* ==================================================================
+ *  LOAD + RENDER
+ * ================================================================== */
+function loadData() {
+  el('loading').classList.remove('hidden');
+  google.script.run
+    .withSuccessHandler(onData)
+    .withFailureHandler(err => {
+      if (isAuthError(err)) { logout('Your session expired — please sign in again.'); return; }
+      el('loading').textContent = 'Error: ' + err.message;
+    })
+    .getData(getAuth());
+}
+
+function onData(data) {
+  state = data;
+  if (session && state.userDisplayName) { session.name = state.userDisplayName; persistSession(); updateWelcome(); }
+  el('thresholdInput').value = state.threshold || 0;
+  // Advanced filter: keep the category list fresh without losing a selection
+  const keepCat = el('fltCategory').value;
+  el('fltCategory').innerHTML = '<option value="">All</option>' +
+    state.categories.map(c => '<option' + (c === keepCat ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
+  computeProjection();
+  renderSummary();
+  renderBacklog();
+  renderChecks();
+  // Unhide BEFORE rendering — FullCalendar measures its parent; rendering
+  // into a hidden element caused the stacked-chip bug.
+  el('loading').classList.add('hidden');
+  el('mainWrap').classList.remove('hidden');
+  calendarDirty = true;
+  refreshViews();
+}
+
+/* ==================================================================
+ *  FORECASTING — full daily balance map (history + projection)
+ * ================================================================== */
+function computeProjection() {
+  projection = {};
+  dailyBalance = {};
+  const today = state.today;
+
+  // History: the settled block is chronological (server re-stitching), so
+  // the last settled row per date is that date's true end-of-day balance.
+  const settled = state.transactions.filter(t => t.settled);
+  const eodByDate = {};
+  settled.forEach(t => { eodByDate[t.date] = t.balance; });
+
+  const histDates = Object.keys(eodByDate).sort();
+  if (histDates.length) {
+    let run = eodByDate[histDates[0]];
+    let cursor = new Date(histDates[0] + 'T00:00:00');
+    const stop = new Date(today + 'T00:00:00');
+    while (cursor < stop) {
+      const key = localDateKey(cursor);
+      if (eodByDate[key] !== undefined) run = eodByDate[key];
+      dailyBalance[key] = run;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+
+  // Projection: last settled balance + pending net by date (overdue → today)
+  let bal = state.currentBalance;
+  const pending = state.transactions.filter(t => !t.settled);
+  const byDate = {};
+  pending.forEach(t => {
+    const d = (t.date < today) ? today : t.date;
+    byDate[d] = (byDate[d] || 0) + t.deposit - t.withdrawal;
+  });
+
+  // PDC Today-Forward Urgency: pending checks due TODAY or in the PAST hit
+  // today's balance and carry forward; future-dated pending checks land on
+  // their Target Date. Historical footers stay pure settled-Ledger data
+  // because byDate is only consumed by the today→horizon loop below.
+  // Bounced/Voided checks are excluded (the Ledger double-entry neutralized
+  // them); isDuplicate checks are excluded (the Ledger row already counts).
+  (state.checks || []).forEach(c => {
+    if (String(c.status || '').trim().toLowerCase() !== 'pending') return;
+    if (c.isDuplicate || !c.amount) return;
+    const d = (!c.targetDate || c.targetDate <= today) ? today : c.targetDate;   // ← delete the ': c.targetDate' branch's use for strict today-only math
+    byDate[d] = (byDate[d] || 0) - c.amount;
+  });
+
+  let cursor = new Date(today + 'T00:00:00');
+  for (let i = 0; i <= HORIZON_DAYS; i++) {
+    const key = localDateKey(cursor);
+    if (byDate[key]) bal += byDate[key];
+    projection[key] = bal;
+    dailyBalance[key] = bal;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+}
+
+/* ==================================================================
+ *  COMMAND CENTER SEARCH + ADVANCED FILTERS — normalized matching
+ *  normText ignores case, extra spaces, and punctuation, so a category
+ *  like 'Abuloy: 3,500' is found by 'abuloy', 'ABULOY 3500', etc.
+ *  Balances, BAL footers, and the summary bar always use the FULL
+ *  ledger — filtering a view must never change your cash math.
+ * ================================================================== */
+const normText = s => String(s || '')
+  .toLowerCase()
+  .replace(/[^\p{L}\p{N}\s]+/gu, '')   // strip colons, commas, periods, symbols
+  .replace(/\s+/g, ' ')                 // collapse runs of whitespace
+  .trim();
+
+function filtersActive() {
+  return !!(filters.q || filters.from || filters.to || filters.category || filters.type ||
+            String(filters.min || '') !== '' || String(filters.max || '') !== '');
+}
+
+function matchesFilters(t) {
+  if (filters.q) {
+    const q = normText(filters.q);
+    const hay = normText([t.beneficiary, t.recipient, t.destination, t.account,
+                          t.category, t.details, t.type, t.trace, t.date].join(' '));
+    if (q && hay.indexOf(q) === -1) return false;
+  }
+  if (filters.from && t.date < filters.from) return false;
+  if (filters.to && t.date > filters.to) return false;
+  if (filters.category && normText(t.category) !== normText(filters.category)) return false;
+  if (filters.type && t.type !== filters.type) return false;
+  const amt = t.withdrawal || t.deposit;
+  if (String(filters.min) !== '' && amt < Number(filters.min)) return false;
+  if (String(filters.max) !== '' && amt > Number(filters.max)) return false;
+  return true;
+}
+
+function visibleTransactions() {
+  if (!filtersActive()) return state.transactions;
+  return state.transactions.filter(matchesFilters);
+}
+
+let filterTimer = null;
+function applyFiltersDebounced() {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(applyFilters, 200);
+}
+
+function applyFilters() {
+  filters.q = el('searchInput').value.trim();
+  filters.from = el('fltFrom').value;
+  filters.to = el('fltTo').value;
+  filters.category = el('fltCategory').value;
+  filters.type = el('fltType').value;
+  filters.min = el('fltMin').value;
+  filters.max = el('fltMax').value;
+  el('filterDot').classList.toggle('hidden', !filtersActive());
+  const n = visibleTransactions().length;
+  el('fltCount').textContent = filtersActive()
+    ? n + ' of ' + state.transactions.length + ' transactions match'
+    : '';
+  // Re-render whichever views are on stage; the calendar goes dirty otherwise
+  if (!analyticsOn && baseView === 'calendar') renderCalendar();
+  else calendarDirty = true;
+  if (!analyticsOn && baseView === 'list') renderListTable();
+  if (analyticsOn) buildAnalytics();
+  if (baseView === 'list') renderListTable();
+}
+
+/* ==================================================================
+ *  VIEW MANAGEMENT — Calendar | List switch + Analytics mode
+ * ================================================================== */
+function refreshViews() {
+  const showCal = !analyticsOn && baseView === 'calendar';
+  const showList = !analyticsOn && baseView === 'list';
+  el('calendarWrap').classList.toggle('hidden', !showCal);
+  el('listWrap').classList.toggle('hidden', !showList);
+  el('analyticsWrap').classList.toggle('hidden', !analyticsOn);
+
+  el('segCal').classList.toggle('on', baseView === 'calendar' && !analyticsOn);
+  el('segList').classList.toggle('on', baseView === 'list' && !analyticsOn);
+  el('analyticsToggle').textContent = analyticsOn ? '↩ Close Analytics' : '📊 Analytics';
+  el('analyticsToggle').classList.toggle('bg-[#101828]', analyticsOn);
+  el('analyticsToggle').classList.toggle('text-white', analyticsOn);
+
+  if (showCal) {
+    if (calendarDirty || !calendar) renderCalendar();
+    else setTimeout(() => calendar.updateSize(), 50);
+  }
+  if (showList) renderListTable();
+  if (analyticsOn) {
+    if (!analyticsDate) analyticsDate = calendar ? calendar.getDate() : new Date(state.today + 'T00:00:00');
+    buildAnalytics();
+  }
+}
+
+function setBaseView(v) { baseView = v; analyticsOn = false; refreshViews(); }
+function toggleAnalytics() {
+  analyticsOn = !analyticsOn;
+  if (analyticsOn) analyticsDate = calendar ? calendar.getDate() : new Date(state.today + 'T00:00:00');
+  refreshViews();
+}
+
+/* ==================================================================
+ *  SUMMARY BAR + drill-down breakdowns (always FULL ledger)
+ * ================================================================== */
+function pending30(kind) {   // kind: 'out' | 'in'
+  const today = state.today, in30 = addDays(today, 30);
+  return state.transactions.filter(t => {
+    if (t.settled) return false;
+    const d = (t.date < today) ? today : t.date;
+    if (d > in30) return false;
+    return kind === 'out' ? t.withdrawal > 0 : t.deposit > 0;
+  });
+}
+
+function renderSummary() {
+  const outs = pending30('out'), ins = pending30('in');
+  const out30 = outs.reduce((s, t) => s + t.withdrawal, 0);
+  const in30 = ins.reduce((s, t) => s + t.deposit, 0);
+
+  el('sumBalance').textContent = peso(state.currentBalance);
+  el('sumBalanceAsOf').textContent = state.balanceAsOf ? 'As of ' + state.balanceAsOf : 'No settled balance found';
+  el('sumOut30').textContent = out30 ? '−' + peso(out30) : '₱0.00';
+  el('sumOut30n').textContent = outs.length + ' planned payable' + (outs.length === 1 ? '' : 's');
+  el('sumIn30').textContent = in30 ? '+' + peso(in30) : '₱0.00';
+  el('sumIn30n').textContent = ins.length + ' expected receivable' + (ins.length === 1 ? '' : 's');
+
+  const eomKey = endOfMonth(state.today);
+  const eom = projection[eomKey];
+  el('sumEOM').textContent = (eom !== undefined) ? peso(eom) : '—';
+  el('sumEOMNote').textContent = 'Through ' + eomKey;
+  el('sumEOM').style.color = (eom !== undefined && eom < (state.threshold || 0)) ? 'var(--dry)' : 'var(--ink)';
+
+  el('backlogCount').textContent = state.backlog.length;
+
+  const threshold = state.threshold || 0;
+  const dryDay = Object.keys(projection).sort().find(d => projection[d] < threshold);
+  const warn = el('dryWarning');
+  if (dryDay) {
+    warn.textContent = '⚠ Projected balance drops below ' + pesoShort(threshold) + ' on ' + dryDay +
+                       ' (' + peso(projection[dryDay]) + '). Consider moving a payable or accelerating a collection.';
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+  }
+}
+
+function openBreakdown(kind) {
+  const items = pending30(kind);
+  const isOut = kind === 'out';
+  el('bdTitle').textContent = isOut ? 'Upcoming Outflows — next 30 days' : 'Expected Inflows — next 30 days';
+
+  const groups = {};
+  let total = 0;
+  items.forEach(t => {
+    const cat = t.category || '(uncategorized)';
+    const amt = isOut ? t.withdrawal : t.deposit;
+    const g = groups[cat] || (groups[cat] = { total: 0, items: [] });
+    g.total += amt; g.items.push(t); total += amt;
+  });
+
+  el('bdSub').textContent = items.length + ' transaction' + (items.length === 1 ? '' : 's') + ' · Total ' + (isOut ? '−' : '+') + peso(total);
+
+  const cats = Object.keys(groups).sort((a, b) => groups[b].total - groups[a].total);
+  const color = isOut ? '#B54708' : '#067647';
+  let html = '';
+  cats.forEach(cat => {
+    const g = groups[cat];
+    html += '<div class="mb-3">' +
+      '<div class="flex justify-between items-center py-1.5 border-b border-[#E4E7EC]">' +
+        '<span class="text-sm font-semibold">' + esc(cat) + '</span>' +
+        '<span class="mono text-sm font-semibold" style="color:' + color + '">' + (isOut ? '−' : '+') + peso(g.total) + '</span>' +
+      '</div>';
+    g.items.forEach(t => {
+      html += '<div class="flex justify-between items-center py-1 pl-3 text-sm">' +
+        '<span class="truncate text-slate-600">' + esc(t.date) + ' · ' + esc(t.beneficiary || t.recipient || t.details || '—') +
+          (t.state === 'inputted' ? ' <span style="color:#d97706">◆</span>' : ' <span class="text-slate-400">◇</span>') + '</span>' +
+        '<span class="mono text-slate-700 shrink-0 ml-2">' + peso(isOut ? t.withdrawal : t.deposit) + '</span>' +
+      '</div>';
+    });
+    html += '</div>';
+  });
+  el('bdList').innerHTML = html || '<p class="text-sm text-slate-400 py-4">Nothing pending in this window.</p>';
+  el('breakdownModal').showModal();
+}
+
+/* ==================================================================
+ *  PURPOSE-FIRST DISPLAY LOGIC
+ * ================================================================== */
+function fallbackText(t) { return t.details || t.category || t.beneficiary || t.recipient || '—'; }
+
+function displayLabel(t) {
+  const type = (t.type || '').trim().toLowerCase();
+  const what = fallbackText(t);
+  const who = t.recipient || t.beneficiary || '';
+  if (type === 'transfer')      return who ? what + ' (via ' + who + ')' : what;
+  if (type === 'reimbursement') return who ? what + ' (Reimb. to ' + who + ')' : what;
+  if (type === 'direct' || type === 'deposit') {
+    const lead = t.beneficiary || t.details || t.category || t.recipient || '—';
+    return (t.details && t.beneficiary) ? lead + ' - ' + t.details : lead;
+  }
+  if (type === 'intercompany' || type === 'cash advance') return t.type + ': ' + what;
+  return what;
+}
+
+/* ==================================================================
+ *  VIEW 1: CALENDAR
+ * ================================================================== */
+function buildEvents() {
+  const events = [];
+  const settledByDay = {};
+
+  visibleTransactions().forEach(t => {
+    if (t.settled) {
+      const agg = settledByDay[t.date] || (settledByDay[t.date] = { in: 0, out: 0 });
+      agg.in += t.deposit; agg.out += t.withdrawal;
+    } else {
+      const inputted = t.state === 'inputted';
+      const symbol = inputted ? '◆' : '◇';
+      events.push({
+        title: symbol + ' ' + (t.withdrawal ? '−' : '+') + pesoShort(t.withdrawal || t.deposit) + ' ' + displayLabel(t),
+        start: t.date, allDay: true,
+        classNames: [inputted ? 'evt-input' : (t.withdrawal ? 'evt-plan-out' : 'evt-plan-in')],
+        extendedProps: { kind: t.state }
+      });
+    }
+  });
+
+  Object.keys(settledByDay).forEach(d => {
+    const a = settledByDay[d];
+    if (a.in)  events.push({ title: '+' + pesoShort(a.in),  start: d, allDay: true, classNames: ['evt-in'],  extendedProps: { kind: 'settled' } });
+    if (a.out) events.push({ title: '−' + pesoShort(a.out), start: d, allDay: true, classNames: ['evt-out'], extendedProps: { kind: 'settled' } });
+  });
+
+  // Check Registry ghost chips — hidden when isDuplicate (already in Ledger).
+  // Overdue checks surface on TODAY, matching the urgency math above.
+  (state.checks || []).forEach(c => {
+    if (String(c.status || '').trim().toLowerCase() !== 'pending') return;
+    if (c.isDuplicate || !c.amount) return;
+    const d = (!c.targetDate || c.targetDate < state.today) ? state.today : c.targetDate;
+    events.push({
+      title: (window.innerWidth <= 640 ? '' : '🧾 ') + '−' + pesoShort(c.amount) + ' ' + (c.payee || 'Check') + (c.checkNum ? ' #' + c.checkNum : ''),
+      start: d, allDay: true, classNames: ['evt-check'], extendedProps: { kind: 'check' }
+    });
+  });
+
+  return events;
+}
+
+function renderCalendar() {
+  const keepDate = calendar ? calendar.getDate() : null;
+  const keepView = calendar ? calendar.view.type : (el('viewSelect').value === 'year' ? 'multiMonthYear' : 'dayGridMonth');
+  if (calendar) calendar.destroy();
+  calendar = new FullCalendar.Calendar(el('calendar'), {
+    initialView: keepView,
+    initialDate: keepDate || undefined,
+    height: window.innerWidth <= 640 ? 'auto' : 900,   // mobile: size to content, no stretched rows
+    firstDay: 0,                 // week starts on Sunday → Wednesday is the center column
+    multiMonthMaxColumns: 3,
+    headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
+    dayMaxEvents: 4,
+    events: buildEvents(),
+    dateClick: info => openDayModal(info.dateStr),
+    eventClick: info => openDayModal(info.event.startStr),
+    dayCellDidMount: arg => {
+      if (arg.view.type !== 'dayGridMonth') return;   // BAL footers only in Month View
+      const key = localDateKey(arg.date);
+      const bal = dailyBalance[key];
+      if (bal === undefined) return;
+      const footer = document.createElement('div');
+      footer.className = 'bal-footer';
+      footer.innerHTML = '<span class="bal-label">BAL:</span>' + pesoShort(bal);
+      footer.title = (key < state.today ? 'End-of-day balance: ' : 'Projected end-of-day balance: ') + peso(bal);
+      arg.el.querySelector('.fc-daygrid-day-frame').appendChild(footer);
+      if (key >= state.today && bal < (state.threshold || 0)) arg.el.classList.add('cash-dry');
+    }
+  });
+  // Deferred render + immediate re-measure — belt-and-braces vs the stacking bug
+  setTimeout(() => { calendar.render(); calendar.updateSize(); }, 100);
+  calendarDirty = false;
+}
+
+/* ==================================================================
+ *  VIEW 2: LIST — table mirror of the ledger, filtered & clickable
+ *  v9 Refined: Supports Year/Month scoping and scrubbing
+ * ================================================================== */
+function renderListTable() {
+  // 1. Initialize navigation date if not set
+  if (!listDate) {
+    const start = calendar ? calendar.getDate() : new Date(state.today + 'T00:00:00');
+    listDate = new Date(start.getTime()); 
+    listDate.setDate(1); // Set to 1st to prevent "End of Month" math bugs
+  }
+  const y = listDate.getFullYear();
+  const m = listDate.getMonth();
+  const isYearView = el('viewSelect').value === 'year';
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  
+  // 2. Update Title (e.g., "2026" or "July 2026")
+  el('listTitle').textContent = isYearView ? String(y) : monthNames[m] + ' ' + y;
+
+  // 3. FILTER DATA: Matches current Search + the selected Month/Year
+  const rows = visibleTransactions().filter(t => {
+    const ty = Number(t.date.slice(0, 4));
+    const tm = Number(t.date.slice(5, 7)) - 1;
+    if (isYearView) return ty === y;
+    return ty === y && tm === m;
+  }).sort((a, b) => b.date.localeCompare(a.date) || b.row - a.row); // Newest first
+
+  el('listCount').textContent = rows.length + ' transaction' + (rows.length === 1 ? '' : 's');
+
+  const body = el('listBody');
+  body.innerHTML = '';
+  
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="10" class="text-center text-slate-400 py-12 font-medium">No transactions match the current filters for this period.</td></tr>';
+    return;
+  }
+
+  rows.forEach(t => {
+    const tr = document.createElement('tr');
+    tr.className = 'hover:bg-slate-50 cursor-pointer transition-colors';
+    
+    const badge = t.settled
+      ? '<span class="st-badge st-settled">✓ Settled</span>'
+      : (t.state === 'inputted'
+          ? '<span class="st-badge st-inputted">◆ Inputted</span>'
+          : '<span class="st-badge st-planned">◇ Planned</span>');
+          
+    tr.innerHTML =
+      '<td class="mono whitespace-nowrap">' + esc(t.date) + '</td>' +
+      '<td>' + badge + '</td>' +
+      '<td class="mono text-xs text-slate-500">' + esc(t.trace || '') + '</td>' +
+      '<td>' + esc(t.category || '') + '</td>' +
+      '<td class="font-medium">' + esc(t.beneficiary || '') + '</td>' +
+      '<td>' + esc(t.recipient || '') + '</td>' +
+      '<td class="text-slate-500 text-xs italic truncate" style="max-width:350px">' + esc(t.details || '') + '</td>' +
+      '<td class="num" style="color:#dc2626">' + (t.withdrawal ? peso(t.withdrawal) : '') + '</td>' +
+      '<td class="num" style="color:#16a34a">' + (t.deposit ? peso(t.deposit) : '') + '</td>' +
+      '<td class="num font-bold border-l border-slate-50">' + (t.settled && t.balance !== null ? peso(t.balance) : '') + '</td>';
+    
+    // Passing full object for detail modal
+    tr.addEventListener('click', () => openDetailModal(t));
+    body.appendChild(tr);
+  });
+}
+
+
+/* ==================================================================
+ *  BIDIRECTIONAL SMART MEMORY — quads {b, r, d, a}
+ *  Typing in ANY field filters the other three; exact-match filters
+ *  only (half-typed text never filters); single candidate auto-fills.
+ * ================================================================== */
+const FIELD_KEYS = ['b', 'r', 'd', 'a'];
+const FIELD_LIST = { b: 'benList', r: 'recList', d: 'destList', a: 'acctList' };
+
+function fieldFallback(field) {
+  return field === 'b' ? state.beneficiaries
+       : field === 'r' ? state.recipients
+       : field === 'd' ? state.destinations
+       : state.accounts;
+}
+
+function comboScope(field, vals) {
+  const knownVals = { b: {}, r: {}, d: {}, a: {} };
+  state.combos.forEach(c => FIELD_KEYS.forEach(f => { knownVals[f][norm(c[f])] = 1; }));
+  const filt = {};
+  FIELD_KEYS.forEach(f => {
+    if (f === field) return;
+    const v = norm(vals[f]);
+    if (v && knownVals[f][v]) filt[f] = v;
+  });
+  const filtered = Object.keys(filt).length > 0;
+  const cands = state.combos.filter(c =>
+    FIELD_KEYS.every(f => !filt[f] || norm(c[f]) === filt[f]));
+  const seen = {}, list = [];
+  cands.forEach(c => { const v = c[field]; if (v && !seen[norm(v)]) { seen[norm(v)] = 1; list.push(v); } });
+  if (!list.length && !filtered) return { list: fieldFallback(field), filtered: false };
+  return { list: list, filtered: filtered };
+}
+
+function trioVals(trio) {
+  return { b: trio.b ? trio.b.value : '', r: trio.r.value, d: trio.d.value, a: trio.a.value };
+}
+
+function refreshTrioList(field, trio) {
+  el(FIELD_LIST[field]).innerHTML =
+    comboScope(field, trioVals(trio)).list.map(x => '<option value="' + esc(x) + '">').join('');
+}
+
+function dependentFill(trio) {
+  const vals = trioVals(trio);
+  FIELD_KEYS.forEach(f => {
+    if (!trio[f] || trio[f].value.trim()) return;
+    const scope = comboScope(f, vals);
+    if (scope.filtered && scope.list.length === 1) { trio[f].value = scope.list[0]; vals[f] = scope.list[0]; }
+  });
+}
+
+/* benEl may be null (bulk Shared Header has no beneficiary field). */
+function wireSmartMemory(benEl, recEl, destEl, acctEl) {
+  const trio = { b: benEl, r: recEl, d: destEl, a: acctEl };
+  FIELD_KEYS.forEach(f => {
+    if (!trio[f]) return;
+    trio[f].addEventListener('focus', () => refreshTrioList(f, trio));
+    trio[f].addEventListener('input', () => { refreshTrioList(f, trio); dependentFill(trio); });
+  });
+}
+
+/* Beneficiary-driven memory (fills the trio from the most recent entry) */
+function applyAccountMemory(name, destInput, acctInput, recInput) {
+  const m = state.beneficiaryMap[name];
+  if (!m) return;
+  if (recInput && !recInput.value.trim() && m.recipient) recInput.value = m.recipient;
+  if (m.destination) destInput.value = m.destination;
+  if (m.account) acctInput.value = m.account;
+}
+
+/* ==================================================================
+ *  DIRECTIONAL TYPE SAFETY
+ *  Payable: no 'Deposit'. Receivable: only 'Deposit' (default) and
+ *  'Intercompany'. Applied to both the single form and the bulk header.
+ * ================================================================== */
+function setTypeOptions(sel, dir) {
+  const list = dir === 'in' ? TYPES_IN : TYPES_OUT;
+  sel.innerHTML = list.map(t => '<option value="' + t + '">' + t + '</option>').join('');
+  sel.value = dir === 'in' ? 'Deposit' : 'Direct';
+}
+
+/* ==================================================================
+ *  HIGH-VELOCITY TRACE GENERATOR (+ one-click copy)
+ * ================================================================== */
+function suggestSingleTrace() {
+  if (traceEdited) return;
+  const dateISO = el('fDate').value || state.today;
+  const dateStr = dateISO.replace(/-/g, '');
+  const cat = el('fCategory').value.trim();
+  const prefix = (state.categoryPrefixMap && state.categoryPrefixMap[cat]) ||
+                 (cat || el('fDetails').value.trim() || 'Entry').replace(/\s+/g, '');
+  const stem = dateStr + '_' + prefix;
+  let n = 0;
+  state.transactions.forEach(t => { if (t.trace && t.trace.indexOf(stem) === 0) n++; });
+  el('fTrace').value = stem + String(n + 1).padStart(2, '0');
+}
+
+/* ==================================================================
+ *  DAY DETAIL MODAL (Action Hub) — respects active filters
+ * ================================================================== */
+function openDayModal(dateStr) {
+  activeDay = dateStr;
+  el('dayTitle').textContent = new Date(dateStr + 'T00:00:00')
+    .toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  el('dayProj').textContent = dailyBalance[dateStr] !== undefined
+    ? (dateStr < state.today ? 'End-of-day balance: ' : 'Projected end-of-day balance: ') + peso(dailyBalance[dateStr])
+    : '';
+
+  // Modal sync with the Command Center filters: show only matching items
+  const all = state.transactions.filter(t => t.date === dateStr);
+  const items = filtersActive() ? all.filter(matchesFilters) : all;
+  const hidden = all.length - items.length;
+  el('dayFilterNote').classList.toggle('hidden', hidden <= 0);
+  if (hidden > 0) el('dayFilterNote').textContent = '⚠ ' + hidden + ' transaction' + (hidden === 1 ? '' : 's') + ' on this day hidden by active filters';
+
+  const list = el('dayList');
+  list.innerHTML = '';
+  if (!items.length) list.innerHTML = '<p class="text-sm text-slate-400 py-4">' +
+    (hidden > 0 ? 'All transactions on this date are hidden by the active filters.' : 'No transactions on this date.') + '</p>';
+
+  items.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'day-row flex items-center justify-between gap-3 py-2.5';
+    const amt = t.withdrawal ? '−' + peso(t.withdrawal) : '+' + peso(t.deposit);
+    const pillClass = t.settled
+      ? (t.withdrawal ? 'amt-out' : 'amt-in')
+      : (t.state === 'inputted' ? 'amt-input' : (t.withdrawal ? 'amt-plan-out' : 'amt-plan-in'));
+    const pillText = (t.settled ? '' : (t.state === 'inputted' ? '◆ ' : '◇ ')) + amt;
+    const actionable = !t.settled && t.uid;
+
+    // Hierarchy — Header: [Category] • [Beneficiary]; Sub: [Type] · [Recipient] · [Details]; Footer: trace
+    const headBits = [];
+    if (t.category) headBits.push(esc(t.category));
+    if (t.beneficiary) headBits.push(esc(t.beneficiary));
+    const header = headBits.length ? headBits.join(' • ') : esc(displayLabel(t));
+
+    const subBits = [];
+    if (t.type) subBits.push(esc(t.type));
+    if (t.recipient) subBits.push(esc(t.recipient));
+    if (t.details) subBits.push(esc(t.details));
+    const stateTag = t.settled ? '' :
+      (t.state === 'inputted'
+        ? '<span style="color:#d97706;font-weight:600">◆ Inputted — awaiting approval</span>'
+        : '<span class="text-slate-500 font-semibold">◇ Planned</span>');
+
+    // Action bar — primary: [◆ Inputted] [✓] [Settle]; secondary in ⋯ menu
+    const primary = actionable ?
+      (t.state === 'planned'
+        ? '<button class="input-btn text-xs font-semibold text-white bg-[#d97706] hover:bg-[#b45309] rounded px-2 py-1.5" ' +
+          'title="Mark Inputted — entered in the digital bank, awaiting approval" data-uid="' + esc(t.uid) + '">◆ Inputted</button>'
+        : '') +
+      '<button class="quick-settle-btn text-base leading-none text-white bg-[#16a34a] hover:bg-[#15803d] rounded w-8 h-8" ' +
+        'title="Quick settle — planned amount, today\'s date" data-uid="' + esc(t.uid) + '">✓</button>' +
+      '<button class="manual-settle-btn text-xs font-semibold text-[#101828] border border-[#101828] rounded px-2 py-1.5 hover:bg-slate-100" ' +
+        'title="Verify or edit final amount, type, and trace no. before settling" data-uid="' + esc(t.uid) + '">Settle</button>' +
+      '<div class="more-wrap">' +
+        '<button class="more-btn text-lg leading-none text-slate-500 border border-[#E4E7EC] rounded px-2 py-1 hover:bg-slate-100" title="More options">⋯</button>' +
+        '<div class="more-menu hidden">' +
+          (t.state === 'planned'
+            ? '<button class="bl-btn text-slate-700" data-uid="' + esc(t.uid) + '">⇤ Move to Backlog</button>'
+            : '') +
+          '<button class="del-btn text-[#B42318]" data-uid="' + esc(t.uid) + '">🗑 Delete</button>' +
+        '</div>' +
+      '</div>'
+      : '';
+
+    row.innerHTML =
+      '<div class="row-main min-w-0 flex-1" title="Click for full details">' +
+        '<p class="row-head text-sm font-semibold truncate">' + header + '</p>' +
+        '<p class="row-sub text-xs text-slate-400 truncate">' + subBits.join(' · ') +
+        (stateTag ? (subBits.length ? ' · ' : '') + stateTag : '') + '</p>' +
+        (t.trace ? '<p class="row-trace truncate">' + esc(t.trace) + '</p>' : '') +
+      '</div>' +
+      '<div class="row-actions flex items-center gap-2 shrink-0 flex-wrap justify-end">' +
+        '<span class="amt-wrap"><span class="mono text-sm amt-pill ' + pillClass + '">' + pillText + '</span></span>' +
+        primary +
+      '</div>';
+    row.querySelector('.row-main').addEventListener('click', () => openDetailModal(t));
+    list.appendChild(row);
+  });
+
+  // Post-Dated Checks maturing on this day (overdue ones surface on today)
+  const dayChecks = (state.checks || []).filter(c => {
+    if (checkStatusLc(c) !== 'pending') return false;
+    const d = (!c.targetDate || c.targetDate < state.today) ? state.today : c.targetDate;
+    return d === dateStr;
+  });
+  if (dayChecks.length) {
+    const hdr = document.createElement('p');
+    hdr.className = 'card-label pt-3';
+    hdr.textContent = '🧾 Post-Dated Checks due';
+    list.appendChild(hdr);
+    dayChecks.forEach((c, i) => {
+      const row = document.createElement('div');
+      row.className = 'day-row flex items-center justify-between gap-3 py-2.5';
+      row.innerHTML =
+        '<div class="min-w-0 flex-1">' +
+          '<p class="row-head text-sm font-semibold truncate">🧾 ' + esc(c.payee || '—') + (c.category ? ' • ' + esc(c.category) : '') + '</p>' +
+          '<p class="row-sub text-xs text-slate-400 truncate">Check' + (c.bank ? ' · ' + esc(c.bank) : '') +
+            (c.memo ? ' · ' + esc(c.memo) : '') +
+            (c.isDuplicate ? ' · <span class="chk-dup">⚠ In Ledger</span>' : '') + '</p>' +
+          '<p class="row-trace truncate">#' + esc(c.checkNum || '') + '</p>' +
+        '</div>' +
+        '<div class="row-actions flex items-center gap-2 shrink-0 flex-wrap justify-end">' +
+          '<span class="amt-wrap"><span class="mono text-sm amt-pill amt-check">🧾 −' + peso(c.amount) + '</span></span>' +
+          checkActionsHTML(c, i) +
+        '</div>';
+      list.appendChild(row);
+    });
+    attachCheckHandlers(list, dayChecks);
+  }
+
+  // ⋯ menu open/close (one open at a time; closes on outside click)
+  list.querySelectorAll('.more-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const menu = btn.nextElementSibling;
+      const wasHidden = menu.classList.contains('hidden');
+      list.querySelectorAll('.more-menu').forEach(m => m.classList.add('hidden'));
+      if (wasHidden) menu.classList.remove('hidden');
+    });
+  });
+
+  list.querySelectorAll('.input-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.disabled = true; btn.textContent = '…';
+      google.script.run
+        .withSuccessHandler(data => { el('dayModal').close(); onData(data); })
+        .withFailureHandler(err => { alert(err.message); btn.disabled = false; btn.textContent = '◆ Inputted'; })
+        .markInputted(getAuth(), btn.dataset.uid);
+    });
+  });
+
+  list.querySelectorAll('.bl-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!confirm('Move this planned transaction to the Backlog? It leaves the calendar and forecast until you re-schedule it.')) return;
+      btn.disabled = true; btn.textContent = '…';
+      google.script.run
+        .withSuccessHandler(data => { el('dayModal').close(); onData(data); })
+        .withFailureHandler(err => { alert(err.message); btn.disabled = false; btn.textContent = '⇤ Move to Backlog'; })
+        .moveToBacklog(getAuth(), btn.dataset.uid);
+    });
+  });
+
+  list.querySelectorAll('.quick-settle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = state.transactions.find(x => x.uid === btn.dataset.uid);
+      const label = t ? (t.withdrawal ? '−' : '+') + peso(t.withdrawal || t.deposit) + ' · ' + displayLabel(t) : '';
+      if (!confirm('Settle now at the planned amount, dated today?\n' + label)) return;
+      btn.disabled = true; btn.textContent = '…';
+      google.script.run
+        .withSuccessHandler(data => { el('dayModal').close(); onData(data); })
+        .withFailureHandler(err => { alert(err.message); btn.disabled = false; btn.textContent = '✓'; })
+        .settleTransaction(getAuth(), { uid: btn.dataset.uid });
+    });
+  });
+
+  list.querySelectorAll('.manual-settle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = state.transactions.find(x => x.uid === btn.dataset.uid);
+      if (t) { el('dayModal').close(); openSettleModal(t); }
+    });
+  });
+
+  list.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!confirm('Delete this planned transaction from the Ledger?')) return;
+      btn.disabled = true; btn.textContent = '…';
+      google.script.run
+        .withSuccessHandler(data => { el('dayModal').close(); onData(data); })
+        .withFailureHandler(err => { alert(err.message); btn.disabled = false; btn.textContent = '🗑 Delete'; })
+        .deletePlanned(getAuth(), btn.dataset.uid);
+    });
+  });
+
+  el('dayModal').showModal();
+}
+
+/* ==================================================================
+ *  NESTED TRANSACTION DETAIL VIEW — full text of every field
+ * ================================================================== */
+function openDetailModal(t) {
+  // 1. EXIT FIRST if user is selecting text to copy
+  if (window.getSelection().toString().length > 0) return; 
+
+  // 2. NOW build the header and content
+  const headBits = [];
+  if (t.category) headBits.push(t.category);
+  if (t.beneficiary) headBits.push(t.beneficiary);
+  
+  el('dtHead').textContent = headBits.length ? headBits.join(' • ') : displayLabel(t);
+
+  el('dtState').innerHTML = t.settled
+    ? '<span style="color:#16a34a;font-weight:600">✓ Settled</span>'
+    : (t.state === 'inputted'
+        ? '<span style="color:#d97706;font-weight:600">◆ Inputted — awaiting approval</span>'
+        : '<span class="text-slate-500 font-semibold">◇ Planned</span>');
+
+  const amtPill = el('dtAmt');
+  amtPill.className = 'mono text-base amt-pill ' + (t.settled
+    ? (t.withdrawal ? 'amt-out' : 'amt-in')
+    : (t.state === 'inputted' ? 'amt-input' : (t.withdrawal ? 'amt-plan-out' : 'amt-plan-in')));
+  amtPill.textContent = (t.withdrawal ? '−' : '+') + peso(t.withdrawal || t.deposit);
+
+  const fields = [
+    ['Date', t.date],
+    ['Type', t.type],
+    ['Expense Category', t.category],
+    ['Beneficiary', t.beneficiary],
+    ['Recipient', t.recipient],
+    ['Destination', t.destination],
+    ['Account #', t.account],
+    ['Trace / Check No.', t.trace],
+    ['Details', t.details],
+    ['End-of-day Balance', t.settled && t.balance !== null ? peso(t.balance) : '']
+  ];
+  el('dtFields').innerHTML = fields
+    .filter(f => String(f[1] || '').trim())
+    .map(f =>
+      '<div class="detail-field' + (f[0] === 'Details' ? ' sm:col-span-2' : '') + '">' +
+        '<p class="card-label">' + esc(f[0]) + '</p>' +
+        '<p class="val mt-0.5' + ((f[0] === 'Trace / Check No.' || f[0] === 'Account #' || f[0] === 'End-of-day Balance') ? ' mono' : '') + '">' + esc(f[1]) + '</p>' +
+      '</div>').join('');
+
+  el('detailModal').showModal();
+}
+
+/* ==================================================================
+ *  SETTLE MODAL
+ * ================================================================== */
+function openSettleModal(t) {
+  settleUid = t.uid;
+  el('sPayee').textContent = displayLabel(t);
+  el('sPlanned').textContent = 'Planned: ' + (t.withdrawal ? '−' : '+') + peso(t.withdrawal || t.deposit) + ' on ' + t.date;
+  el('sDate').value = state.today;
+  el('sAmount').value = (t.withdrawal || t.deposit).toFixed(2);
+  el('sBeneficiary').value = t.beneficiary || '';
+  el('sRecipient').value = t.recipient || '';
+  el('sCategory').value = t.category || '';
+  el('sDetails').value = t.details || '';
+  el('sType').value = t.type || (t.withdrawal ? 'Direct' : 'Deposit');
+  el('sTrace').value = '';
+  populateBaseLists();
+  el('settleError').classList.add('hidden');
+  el('settleModal').showModal();
+}
+
+function saveSettle() {
+  const payload = {
+    uid: settleUid,
+    date: el('sDate').value,
+    amount: parseFloat(el('sAmount').value),
+    beneficiary: el('sBeneficiary').value.trim(),
+    recipient: el('sRecipient').value.trim(),
+    category: el('sCategory').value.trim(),
+    details: el('sDetails').value.trim(),
+    type: el('sType').value,
+    trace: el('sTrace').value.trim()
+  };
+  const errBox = el('settleError');
+  if (!payload.date || !(payload.amount > 0)) {
+    errBox.textContent = 'A settle date and a positive final amount are required.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+  const btn = el('saveSettle');
+  btn.disabled = true; btn.textContent = 'Settling…';
+  google.script.run
+    .withSuccessHandler(data => { btn.disabled = false; btn.textContent = 'Confirm & settle'; el('settleModal').close(); onData(data); })
+    .withFailureHandler(err => { btn.disabled = false; btn.textContent = 'Confirm & settle'; errBox.textContent = err.message; errBox.classList.remove('hidden'); })
+    .settleTransaction(getAuth(), payload);
+}
+
+/* ==================================================================
+ *  ADD PLANNED MODAL (single + bulk) — with Backlog basket support
+ * ================================================================== */
+function populateBaseLists() {
+  el('benList').innerHTML = state.beneficiaries.map(x => '<option value="' + esc(x) + '">').join('');
+  el('recList').innerHTML = state.recipients.map(x => '<option value="' + esc(x) + '">').join('');
+  el('destList').innerHTML = state.destinations.map(x => '<option value="' + esc(x) + '">').join('');
+  el('acctList').innerHTML = state.accounts.map(x => '<option value="' + esc(x) + '">').join('');
+  el('catList').innerHTML = state.categories.map(x => '<option value="' + esc(x) + '">').join('');
+}
+
+function openAddModal(dateStr, prefill) {
+  // OLD: backlogFrom = prefill ? { ... } : null;
+  backlogFrom = (prefill && prefill.fromBacklog) ? {
+    uid: prefill.uid || '',
+    row: prefill.row || 0,
+    ben: prefill.beneficiary || '',
+    amt: prefill.withdrawal || prefill.deposit || 0
+  } : null;
+  el('fDate').value = dateStr || state.today;
+  el('fAmount').value = ''; el('fBeneficiary').value = ''; el('fRecipient').value = '';
+  el('fDestination').value = ''; el('fAccount').value = '';
+  el('fCategory').value = ''; el('fDetails').value = '';
+  el('formError').classList.add('hidden');
+  populateBaseLists();
+  setDirection('out');
+  setBulkMode(false);
+  traceEdited = false;
+
+  if (prefill) {
+    setDirection(prefill.deposit > 0 ? 'in' : 'out');
+    el('fAmount').value = (prefill.withdrawal || prefill.deposit || '') ? Number(prefill.withdrawal || prefill.deposit).toFixed(2) : '';
+    el('fBeneficiary').value = prefill.beneficiary || '';
+    el('fRecipient').value = prefill.recipient || '';
+    el('fDestination').value = prefill.destination || '';
+    el('fAccount').value = prefill.account || '';
+    el('fCategory').value = prefill.category || '';
+    el('fDetails').value = prefill.details || '';
+    if (prefill.type && Array.from(el('fType').options).some(o => o.value === prefill.type)) {
+      el('fType').value = prefill.type;
+    }
+  }
+  el('addSubtitle').textContent = backlogFrom
+    ? 'From the Backlog — saving moves this item onto the Ledger as a Planned transaction (it earns its Shadow ID here).'
+    : 'Writes a row to the Ledger. Your running balance is untouched until you settle it.';
+  suggestSingleTrace();
+  if (prefill && prefill.trace) { el('fTrace').value = prefill.trace; traceEdited = true; }
+
+  // Bulk header reset
+  el('bDate').value = dateStr || state.today;
+  el('bRefDate').value = dateStr || state.today;
+  el('bRecipient').value = ''; el('bDestination').value = ''; el('bAccount').value = '';
+  el('bTag').value = ''; el('bStart').value = ''; el('bEnd').value = '';
+  el('bCategory').value = '';
+  el('bulkBody').innerHTML = '';
+  addBulkRow();
+  el('addModal').showModal();
+}
+
+function setDirection(dir) {
+  direction = dir;
+  const on = 'rounded-lg border px-3 py-2 text-sm font-semibold ';
+  el('dirOut').className = 'dir-btn ' + on + (dir === 'out' ? 'border-[#B54708] bg-[#FFFAEB] text-[#B54708]' : 'border-[#E4E7EC] text-slate-500');
+  el('dirIn').className  = 'dir-btn ' + on + (dir === 'in'  ? 'border-[#067647] bg-[#ECFDF3] text-[#067647]' : 'border-[#E4E7EC] text-slate-500');
+  // Directional type safety: rebuild both Type dropdowns for this direction
+  setTypeOptions(el('fType'), dir);
+  setTypeOptions(el('bType'), dir);
+}
+
+function saveTransaction() {
+  const payload = {
+    date: el('fDate').value,
+    direction: direction,
+    beneficiary: el('fBeneficiary').value.trim(),
+    recipient: el('fRecipient').value.trim(),
+    destination: el('fDestination').value.trim(),
+    account: el('fAccount').value.trim(),
+    category: el('fCategory').value.trim(),
+    details: el('fDetails').value.trim(),
+    type: el('fType').value,
+    trace: el('fTrace').value.trim(),
+    amount: parseFloat(el('fAmount').value),
+    backlogUid: (backlogFrom && backlogFrom.uid) || '',
+    backlogRow: (backlogFrom && backlogFrom.row) || 0,
+    backlogBen: (backlogFrom && backlogFrom.ben) || '',
+    backlogAmt: (backlogFrom && backlogFrom.amt) || 0
+  };
+  const errBox = el('formError');
+  if (!payload.date || !(payload.amount > 0) || (!payload.beneficiary && !payload.recipient)) {
+    errBox.textContent = 'Date, a positive amount, and at least a Beneficiary or Recipient are required.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+  const btn = el('saveAdd');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  google.script.run
+    .withSuccessHandler(data => { btn.disabled = false; btn.textContent = 'Save to Ledger'; backlogFrom = null; el('addModal').close(); onData(data); })
+    .withFailureHandler(err => { btn.disabled = false; btn.textContent = 'Save to Ledger'; errBox.textContent = err.message; errBox.classList.remove('hidden'); })
+    .addTransaction(getAuth(), payload);
+}
+
+/* ---------- BULK MODE ---------- */
+function setBulkMode(on) {
+  bulkMode = on;
+  el('addModal').classList.toggle('bulk', on);
+  el('simpleFields').classList.toggle('hidden', on);
+  el('bulkFields').classList.toggle('hidden', !on);
+  el('saveAdd').classList.toggle('hidden', on);
+  el('saveBulk').classList.toggle('hidden', !on);
+  el('bulkToggle').textContent = on ? '▭ Single Mode' : '⊞ Bulk Mode';
+  el('addTitle').textContent = on ? 'Batch Planner' : 'Add planned transaction';
+  el('addSubtitle').textContent = on
+    ? 'Shared header applies to every row. Each row becomes one planned ledger entry with an auto-assembled trace number.'
+    : (backlogFrom ? 'From the Backlog — saving moves this item onto the Ledger as a Planned transaction (it earns its Shadow ID here).'
+                   : 'Writes a row to the Ledger. Your running balance is untouched until you settle it.');
+  el('formError').classList.add('hidden');
+  if (on) refreshTracePreviews();
+}
+
+function buildRangeString(startISO, endISO) {
+  if (!startISO || !endISO) return '';
+  const s = new Date(startISO + 'T00:00:00'), e = new Date(endISO + 'T00:00:00');
+  if (isNaN(s) || isNaN(e)) return '';
+  const mm = n => String(n + 1).padStart(2, '0');
+  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
+    return mm(s.getMonth()) + '_' + s.getDate() + '-' + e.getDate();
+  }
+  return mm(s.getMonth()) + '_' + s.getDate() + '-' + mm(e.getMonth()) + '_' + e.getDate();
+}
+
+function buildTrace(seq) {
+  const refISO = el('bRefDate').value || el('bDate').value;
+  const refStr = refISO ? refISO.replace(/-/g, '') : 'YYYYMMDD';
+  const tag = el('bTag').value.replace(/\s+/g, '') || 'TAG';
+  const range = buildRangeString(el('bStart').value, el('bEnd').value);
+  const s = String(seq).padStart(2, '0');
+  return range ? refStr + '_' + tag + '_' + range + '_' + s : refStr + '_' + tag + s;
+}
+
+function addBulkRow() {
+  const tbody = el('bulkBody');
+  const tr = document.createElement('tr');
+  tr.innerHTML =
+    '<td class="text-xs text-slate-400 row-num"></td>' +
+    '<td><input class="field b-ben" list="benList" placeholder="Employee / vendor"></td>' +
+    '<td><input class="field b-rec" list="recList" placeholder="Default"></td>' +
+    '<td><input class="field b-dest" list="destList" placeholder="Default"></td>' +
+    '<td><input class="field mono b-acct" list="acctList" placeholder="Default"></td>' +
+    '<td><input class="field mono b-amt text-right" type="number" min="0" step="0.01" placeholder="0.00"></td>' +
+    '<td><input class="field b-det" placeholder="Row info"></td>' +
+    '<td><span class="trace-preview text-xs b-trace"></span></td>' +
+    '<td><button type="button" class="b-del text-slate-400 hover:text-[#B42318] text-lg leading-none" title="Remove row">&times;</button></td>';
+  tbody.appendChild(tr);
+
+  tr.querySelector('.b-del').addEventListener('click', () => {
+    if (tbody.children.length > 1) { tr.remove(); refreshTracePreviews(); }
+  });
+  tr.querySelector('.b-ben').addEventListener('input', e => {
+    applyAccountMemory(e.target.value, tr.querySelector('.b-dest'), tr.querySelector('.b-acct'), tr.querySelector('.b-rec'));
+  });
+  // Smart Memory quads on the row (beneficiary + override trio)
+  wireSmartMemory(tr.querySelector('.b-ben'), tr.querySelector('.b-rec'), tr.querySelector('.b-dest'), tr.querySelector('.b-acct'));
+  // Tab flow: Details in the last row spawns a fresh row
+  tr.querySelector('.b-det').addEventListener('keydown', e => {
+    if (e.key === 'Tab' && !e.shiftKey && tr === tbody.lastElementChild) addBulkRow();
+  });
+  refreshTracePreviews();
+  return tr;
+}
+
+function refreshTracePreviews() {
+  const rows = el('bulkBody').children;
+  for (let i = 0; i < rows.length; i++) {
+    rows[i].querySelector('.row-num').textContent = i + 1;
+    rows[i].querySelector('.b-trace').textContent = buildTrace(i + 1);
+  }
+  el('bTracePattern').textContent = buildTrace(1);
+}
+
+function saveBulk() {
+  const errBox = el('formError');
+  const rows = [];
+  const trs = el('bulkBody').children;
+  for (let i = 0; i < trs.length; i++) {
+    const ben = trs[i].querySelector('.b-ben').value.trim();
+    const rec = trs[i].querySelector('.b-rec').value.trim();
+    const dest = trs[i].querySelector('.b-dest').value.trim();
+    const acct = trs[i].querySelector('.b-acct').value.trim();
+    const amt = parseFloat(trs[i].querySelector('.b-amt').value);
+    const det = trs[i].querySelector('.b-det').value.trim();
+    const trace = trs[i].querySelector('.b-trace').textContent;   // WYSIWYG
+    if (!ben && !rec && !dest && !acct && !(amt > 0) && !det) continue;
+    if (!ben) { errBox.textContent = 'Row ' + (i + 1) + ': Beneficiary is required.'; errBox.classList.remove('hidden'); return; }
+    if (!(amt > 0)) { errBox.textContent = 'Row ' + (i + 1) + ': Amount must be a positive number.'; errBox.classList.remove('hidden'); return; }
+    rows.push({ beneficiary: ben, recipient: rec, destination: dest, account: acct, amount: amt, details: det, trace: trace });
+  }
+  const payload = {
+    date: el('bDate').value, refDate: el('bRefDate').value, tag: el('bTag').value.trim(),
+    rangeStart: el('bStart').value, rangeEnd: el('bEnd').value,
+    recipient: el('bRecipient').value.trim(), destination: el('bDestination').value.trim(), account: el('bAccount').value.trim(),
+    category: el('bCategory').value, type: el('bType').value, direction: direction, rows: rows
+  };
+  if (!payload.date) { errBox.textContent = 'Transaction Date is required.'; errBox.classList.remove('hidden'); return; }
+  if (!payload.tag) { errBox.textContent = 'Group Tag is required — it builds the trace numbers.'; errBox.classList.remove('hidden'); return; }
+  if (!rows.length) { errBox.textContent = 'Add at least one entry row.'; errBox.classList.remove('hidden'); return; }
+
+  const btn = el('saveBulk');
+  btn.disabled = true; btn.textContent = 'Saving ' + rows.length + '…';
+  google.script.run
+    .withSuccessHandler(data => { btn.disabled = false; btn.textContent = 'Save batch'; el('addModal').close(); onData(data); })
+    .withFailureHandler(err => { btn.disabled = false; btn.textContent = 'Save batch'; errBox.textContent = err.message; errBox.classList.remove('hidden'); })
+    .addBulkTransactions(getAuth(), payload);
+}
+
+/* ==================================================================
+ *  BACKLOG DRAWER — drag-and-drop, pencil edit, bidirectional basket
+ * ================================================================== */
+function openDrawer() { el('drawer').classList.add('open'); el('drawerOverlay').classList.remove('hidden'); }
+function closeDrawer() { el('drawer').classList.remove('open'); el('drawerOverlay').classList.add('hidden'); }
+
+function renderBacklog() {
+  const sort = el('backlogSort').value;
+  const items = state.backlog.slice();
+  if (sort === 'priority') {
+    const w = { High: 0, Med: 1, Medium: 1, Low: 2 };
+    items.sort((a, b) => ((w[a.priority] !== undefined ? w[a.priority] : 1) - (w[b.priority] !== undefined ? w[b.priority] : 1)));
+  } else if (sort === 'date') {
+    items.sort((a, b) => (a.date || '9999-12-31').localeCompare(b.date || '9999-12-31'));
+  }
+  el('backlogCount').textContent = state.backlog.length;
+  el('dragHint').style.display = (sort === 'manual' && items.length > 1) ? '' : 'none';
+
+  const box = el('backlogList');
+  if (blSortable) { blSortable.destroy(); blSortable = null; }
+  box.innerHTML = '';
+  if (!items.length) {
+    box.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">Backlog is empty. Use ＋ Add Entry, move planned items here from the day view, or type rows directly into the Backlog sheet.</p>';
+    return;
+  }
+
+  items.forEach(it => {
+    const overdue = it.date && it.date < state.today;
+    const amt = it.withdrawal ? '−' + peso(it.withdrawal) : '+' + peso(it.deposit);
+    const amtColor = it.withdrawal ? '#B54708' : '#067647';
+    const card = document.createElement('div');
+    card.className = 'bl-item' + (overdue ? ' bl-overdue' : '');
+    card.dataset.row = it.row;   // sheet-row identity — works even without a UID
+    card.innerHTML =
+      '<div class="flex items-start justify-between gap-2">' +
+        '<div class="min-w-0">' +
+          '<p class="text-sm font-semibold truncate">' + esc(it.category || '—') + (it.beneficiary ? ' • ' + esc(it.beneficiary) : '') + '</p>' +
+          '<p class="text-xs mt-0.5 ' + (overdue ? 'text-[#B42318] font-semibold' : 'text-slate-400') + '">' +
+            (it.date ? (overdue ? '⚠ Overdue · ' : 'Due ') + esc(it.date) : 'No due date') +
+            (it.details ? ' · ' + esc(it.details) : '') + '</p>' +
+        '</div>' +
+        '<div class="flex items-center gap-1 shrink-0">' +
+          '<button class="bl-edit text-slate-400 hover:text-[#101828] text-sm border border-[#E4E7EC] rounded px-1.5 py-0.5" title="Edit this Backlog entry">✎</button>' +
+          '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded prio-' + esc(it.priority || 'Med') + '">' + esc((it.priority || 'Med').toUpperCase()) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="flex items-center justify-between mt-2">' +
+        '<span class="mono text-sm font-semibold" style="color:' + amtColor + '">' + amt + '</span>' +
+        '<button class="bl-add text-xs font-semibold text-white bg-[#101828] rounded px-2 py-1 hover:bg-slate-700">Add to Calendar</button>' +
+      '</div>';
+
+    card.querySelector('.bl-edit').addEventListener('click', e => {
+      e.stopPropagation();
+      openBacklogModal(it);   // edit mode
+    });
+    card.querySelector('.bl-add').addEventListener('click', () => {
+      closeDrawer();
+      openAddModal(it.date && it.date >= state.today ? it.date : state.today,
+                   Object.assign({ fromBacklog: true }, it));
+    });
+    box.appendChild(card);
+  });
+
+  // Drag-and-drop reordering — manual sort only (dragging a priority- or
+  // date-sorted list would silently rewrite your manual order)
+  if (sort === 'manual' && items.length > 1 && window.Sortable) {
+    blSortable = Sortable.create(box, {
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      onEnd: () => {
+        const order = Array.from(box.children)
+          .map(c => Number(c.dataset.row)).filter(Boolean);
+        // Optimistically mirror the new order in local state
+        const byRow = {};
+        state.backlog.forEach(x => { byRow[x.row] = x; });
+        state.backlog = order.map(rn => byRow[rn]).filter(Boolean);
+        // Sync to the Backlog sheet (original row numbers → new order)
+        google.script.run
+          .withSuccessHandler(data => { state.backlog = data.backlog; renderBacklog(); })
+          .withFailureHandler(err => { alert('Reorder failed: ' + err.message); loadData(); })
+          .reorderBacklog(getAuth(), order);
+      }
+    });
+  }
+}
+
+/* ---- Add / Edit Backlog Entry ----
+   Add mode → addBacklogEntry (server mints a Shadow ID).
+   Edit mode → updateBacklogEntry (no ID minted — manual rows stay
+   ID-less until they hit the calendar). */
+function openBacklogModal(item) {
+  blEditRef = item ? {
+    uid: item.uid || '', row: item.row || 0,
+    ben: item.beneficiary || '', amt: item.withdrawal || item.deposit || 0
+  } : null;
+
+  el('blTitle').textContent = item ? 'Edit Backlog Entry' : 'Add Backlog Entry';
+  el('blSubtitle').textContent = item
+    ? 'Updates this entry in place on the Backlog sheet.'
+    : 'Parks a payable/receivable on the Backlog sheet — it stays off the calendar and forecast until you schedule it.';
+  el('saveBlAdd').textContent = item ? 'Save changes' : 'Save to Backlog';
+
+  el('blDir').value = item ? (item.deposit > 0 ? 'in' : 'out') : 'out';
+  el('blAmount').value = item ? Number(item.withdrawal || item.deposit).toFixed(2) : '';
+  el('blDate').value = (item && item.date) || '';
+  el('blPriority').value = (item && ['Low', 'Med', 'High'].indexOf(item.priority) !== -1) ? item.priority : 'Med';
+  el('blBen').value = (item && item.beneficiary) || '';
+  el('blCat').value = (item && item.category) || '';
+  el('blDet').value = (item && item.details) || '';
+  el('blError').classList.add('hidden');
+  populateBaseLists();
+  el('backlogModal').showModal();
+}
+
+function saveBacklogEntry() {
+  const base = {
+    direction: el('blDir').value,
+    amount: parseFloat(el('blAmount').value),
+    date: el('blDate').value,
+    priority: el('blPriority').value,
+    beneficiary: el('blBen').value.trim(),
+    category: el('blCat').value.trim(),
+    details: el('blDet').value.trim()
+  };
+  const errBox = el('blError');
+  if (!base.beneficiary || !(base.amount > 0)) {
+    errBox.textContent = 'A Beneficiary and a positive amount are required.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+  const btn = el('saveBlAdd');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const done = data => { btn.disabled = false; btn.textContent = blEditRef ? 'Save changes' : 'Save to Backlog'; el('backlogModal').close(); blEditRef = null; onData(data); openDrawer(); };
+  const fail = err => { btn.disabled = false; btn.textContent = blEditRef ? 'Save changes' : 'Save to Backlog'; errBox.textContent = err.message; errBox.classList.remove('hidden'); };
+
+  if (blEditRef) {
+    google.script.run.withSuccessHandler(done).withFailureHandler(fail)
+      .updateBacklogEntry(getAuth(), Object.assign({}, base, {
+        refUid: blEditRef.uid, refRow: blEditRef.row,
+        refBen: blEditRef.ben, refAmt: blEditRef.amt
+      }));
+  } else {
+    google.script.run.withSuccessHandler(done).withFailureHandler(fail)
+      .addBacklogEntry(getAuth(), base);
+  }
+}
+
+/* ==================================================================
+ *  CHECK REGISTRY (PDC) DRAWER
+ * ================================================================== */
+function openChecksDrawer() {
+  closeDrawer();   // one drawer at a time
+  document.getElementById('checksDrawer').style.transform = 'translateX(0)';
+  el('drawerOverlay').classList.remove('hidden');
+}
+function closeChecksDrawer() {
+  document.getElementById('checksDrawer').style.transform = 'translateX(100%)';
+  el('drawerOverlay').classList.add('hidden');
+}
+
+/* ---- Check card actions (shared by drawer and Day-Detail modal) ---- */
+function checkStatusLc(c) { return String(c.status || '').trim().toLowerCase(); }
+
+function checkActionsHTML(c, i) {
+  const st = checkStatusLc(c);
+  let html = '';
+  if (st === 'pending' && !c.isDuplicate) {
+    html += '<button class="chk-add text-xs font-semibold text-white bg-[#0369a1] rounded px-2 py-1 hover:bg-[#075985]" data-i="' + i + '">Add to Ledger</button>';
+  }
+  html += '<button class="chk-defer text-xs font-semibold text-slate-600 border border-[#E4E7EC] rounded px-2 py-1 hover:bg-slate-100" title="Defer Target Deposit Date" data-i="' + i + '">📅 Defer</button>';
+  html += '<div class="more-wrap inline-block">' +
+      '<button class="chk-more text-lg leading-none text-slate-500 border border-[#E4E7EC] rounded px-2 py-0.5 hover:bg-slate-100" title="More options">⋯</button>' +
+      '<div class="more-menu hidden">' +
+        (st === 'pending' ? '<button class="chk-bounce text-[#B42318]" data-i="' + i + '">↩ Record Bounce</button>' : '') +
+        '<button class="chk-void text-slate-700" data-i="' + i + '">∅ Void Check</button>' +
+      '</div>' +
+    '</div>';
+  return html;
+}
+
+function attachCheckHandlers(root, arr) {
+  root.querySelectorAll('.chk-more').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const menu = btn.nextElementSibling;
+      const wasHidden = menu.classList.contains('hidden');
+      document.querySelectorAll('.more-menu').forEach(m => m.classList.add('hidden'));
+      if (wasHidden) menu.classList.remove('hidden');
+    });
+  });
+  root.querySelectorAll('.chk-add').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const c = arr[Number(btn.dataset.i)];
+      closeChecksDrawer();
+      if (el('dayModal').open) el('dayModal').close();
+      const d = (!c.targetDate || c.targetDate < state.today) ? state.today : c.targetDate;
+      openAddModal(d, {
+        beneficiary: c.payee, withdrawal: c.amount, category: c.category,
+        trace: c.checkNum, destination: 'Check', details: c.memo, type: 'Direct'
+      });
+    });
+  });
+  root.querySelectorAll('.chk-defer').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const c = arr[Number(btn.dataset.i)];
+      deferCtx = { checkNum: c.checkNum, amount: c.amount, payee: c.payee };
+      el('dfInfo').textContent = '#' + c.checkNum + ' · ' + (c.payee || '') + ' · −' + peso(c.amount) +
+        (checkStatusLc(c) === 'bounced' ? ' — deferring resets it to Pending' : '');
+      el('dfDate').value = c.targetDate || state.today;
+      el('dfError').classList.add('hidden');
+      el('deferModal').showModal();
+    });
+  });
+  root.querySelectorAll('.chk-bounce').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const c = arr[Number(btn.dataset.i)];
+      if (!confirm('Record check #' + c.checkNum + ' (' + (c.payee || '') + ', −' + peso(c.amount) + ') as BOUNCED?\n\nThis writes TWO settled rows to the Ledger (withdrawal + credit-back) to mirror your bank statement, and marks the check Bounced.')) return;
+      btn.disabled = true; btn.textContent = '…';
+      google.script.run
+        .withSuccessHandler(data => { if (el('dayModal').open) el('dayModal').close(); onData(data); openChecksDrawer(); })
+        .withFailureHandler(err => { alert(err.message); btn.disabled = false; btn.textContent = '↩ Record Bounce'; })
+        .handleCheckBounce(getAuth(), { checkNum: c.checkNum, amount: c.amount, payee: c.payee, category: c.category, memo: c.memo });
+    });
+  });
+  root.querySelectorAll('.chk-void').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const c = arr[Number(btn.dataset.i)];
+      if (!confirm('Void check #' + c.checkNum + '? It will stop affecting the forecast and drop out of the pending list.')) return;
+      btn.disabled = true; btn.textContent = '…';
+      google.script.run
+        .withSuccessHandler(data => { if (el('dayModal').open) el('dayModal').close(); onData(data); openChecksDrawer(); })
+        .withFailureHandler(err => { alert(err.message); btn.disabled = false; btn.textContent = '∅ Void Check'; })
+        .updateCheckStatus(getAuth(), c.checkNum, c.amount, c.payee, '', 'Voided');
+    });
+  });
+}
+
+function saveDefer() {
+  const nd = el('dfDate').value;
+  const errBox = el('dfError');
+  if (!nd) { errBox.textContent = 'Pick a new Target Deposit Date.'; errBox.classList.remove('hidden'); return; }
+  const btn = el('saveDefer');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  google.script.run
+    .withSuccessHandler(data => { btn.disabled = false; btn.textContent = 'Save new date'; el('deferModal').close(); deferCtx = null; onData(data); openChecksDrawer(); })
+    .withFailureHandler(err => { btn.disabled = false; btn.textContent = 'Save new date'; errBox.textContent = err.message; errBox.classList.remove('hidden'); })
+    .updateCheckStatus(getAuth(), deferCtx.checkNum, deferCtx.amount, deferCtx.payee, nd, '');
+}
+
+function renderChecks() {
+  const checks = state.checks || [];
+  const pendingCount = checks.filter(c => checkStatusLc(c) === 'pending').length;
+  el('checksCount').textContent = pendingCount;
+
+  const keepBatch = el('chkBatchFilter').value;
+  el('chkBatchFilter').innerHTML = '<option value="">All batches</option>' +
+    (state.checkBatches || []).map(b =>
+      '<option' + (b === keepBatch ? ' selected' : '') + '>' + esc(b) + '</option>').join('');
+
+  const filterVal = el('chkBatchFilter').value;
+  const items = filterVal ? checks.filter(c => c.batch === filterVal) : checks;
+
+  const box = el('checksList');
+  box.innerHTML = '';
+  if (!items.length) {
+    box.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">' +
+      (checks.length ? 'No checks in this batch.' :
+       'No pending checks due in the next 30 days. Add rows to the Checks sheet to track PDCs here.') + '</p>';
+    return;
+  }
+
+  const sorted = items.slice().sort((a, b) => (a.targetDate || '9999').localeCompare(b.targetDate || '9999'));
+  sorted.forEach((c, i) => {
+    const st = checkStatusLc(c);
+    const bounced = st === 'bounced';
+    const card = document.createElement('div');
+    card.className = 'chk-item' + (bounced ? ' chk-bounced' : (c.overdue ? ' chk-overdue' : ''));
+    card.innerHTML =
+      '<div class="flex items-start justify-between gap-2">' +
+        '<div class="min-w-0">' +
+          '<p class="text-sm font-semibold truncate">🧾 ' + esc(c.payee || '—') +
+            (c.category ? ' <span class="font-normal text-slate-400">• ' + esc(c.category) + '</span>' : '') + '</p>' +
+          '<p class="mono text-xs text-slate-500 mt-0.5">#' + esc(c.checkNum || '—') +
+            (c.bank ? ' · ' + esc(c.bank) : '') + (c.acctNum ? ' · ' + esc(c.acctNum) : '') + '</p>' +
+          '<p class="text-xs mt-0.5 ' + (c.overdue && !bounced ? 'text-[#B42318] font-semibold' : 'text-slate-400') + '">' +
+            (c.targetDate ? (c.overdue && !bounced ? '⚠ Target date passed · ' : 'Target ') + esc(c.targetDate) : 'No target date') +
+            (c.memo ? ' · ' + esc(c.memo) : '') + '</p>' +
+        '</div>' +
+        '<div class="flex flex-col items-end gap-1 shrink-0">' +
+          (bounced ? '<span class="chk-bounce-badge">BOUNCED</span>' : '') +
+          (c.batch ? '<span class="chk-batch">' + esc(c.batch) + '</span>' : '') +
+          (c.isDuplicate ? '<span class="chk-dup" title="This check number already appears as a trace in the Ledger">⚠ In Ledger</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="flex items-center justify-between mt-2 flex-wrap gap-1.5">' +
+        '<span class="mono text-sm font-semibold" style="color:' + (bounced ? '#334155' : '#0369a1') + '">−' + peso(c.amount) + '</span>' +
+        '<div class="flex items-center gap-1.5 flex-wrap">' + checkActionsHTML(c, i) + '</div>' +
+      '</div>';
+    box.appendChild(card);
+  });
+  attachCheckHandlers(box, sorted);
+}
+
+/* ==================================================================
+ *  VIEW 3: ANALYTICS (Chart.js — datalabels NOT registered globally,
+ *  so on-screen charts stay clean; the report opts in per-chart)
+ * ================================================================== */
+function buildAnalytics() {
+  if (!analyticsDate) analyticsDate = calendar ? calendar.getDate() : new Date(state.today + 'T00:00:00');
+  const isYear = el('viewSelect').value === 'year';
+  const y = analyticsDate.getFullYear();
+  const m = analyticsDate.getMonth();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  el('anPeriod').textContent = isYear ? String(y) : monthNames[m] + ' ' + y;
+  el('anTrendLabel').textContent = 'monthly, ' + y + (filtersActive() ? ' (filtered)' : '');
+  el('anCatLabel').textContent = (isYear ? String(y) : monthNames[m] + ' ' + y) + (filtersActive() ? ' (filtered)' : '');
+  el('anCatMode').textContent = catMode === 'expense' ? 'Expense' : 'Income';
+
+  const txns = visibleTransactions();
+
+  // Trend: income vs expense per month of the selected year (settled + pending)
+  const income = new Array(12).fill(0), expense = new Array(12).fill(0);
+  txns.forEach(t => {
+    const ty = Number(t.date.slice(0, 4)), tm = Number(t.date.slice(5, 7)) - 1;
+    if (ty !== y) return;
+    income[tm] += t.deposit; expense[tm] += t.withdrawal;
+  });
+
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(el('trendChart'), {
+    type: 'bar',
+    data: {
+      labels: monthNames,
+      datasets: [
+        { label: 'Income', data: income, backgroundColor: '#16a34a' },
+        { label: 'Expenses', data: expense, backgroundColor: '#dc2626' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { ticks: { callback: v => '₱' + Number(v).toLocaleString('en-PH') } } },
+      plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ': ' + peso(c.parsed.y) } } }
+    }
+  });
+
+  // Doughnut: category breakdown within the selected period (mode toggle)
+  const byCat = periodCategoryTotals(txns, y, m, isYear, catMode === 'expense' ? 'withdrawal' : 'deposit');
+  const cats = Object.keys(byCat).sort((a, b) => byCat[b] - byCat[a]);
+
+  if (catChart) catChart.destroy();
+  catChart = new Chart(el('catChart'), {
+    type: 'doughnut',
+    data: {
+      labels: cats,
+      datasets: [{ data: cats.map(c => byCat[c]), backgroundColor: cats.map((c, i) => doughnutPalette(catMode)[i % 12]) }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: c => c.label + ': ' + peso(c.parsed) } }
+      }
+    }
+  });
+}
+
+function periodCategoryTotals(txns, y, m, isYear, amountKey) {
+  const byCat = {};
+  txns.forEach(t => {
+    const amt = t[amountKey];
+    if (!amt) return;
+    const ty = Number(t.date.slice(0, 4)), tm = Number(t.date.slice(5, 7)) - 1;
+    if (ty !== y) return;
+    if (!isYear && tm !== m) return;
+    const c = t.category || '(uncategorized)';
+    byCat[c] = (byCat[c] || 0) + amt;
+  });
+  return byCat;
+}
+
+function doughnutPalette(mode) {
+  return mode === 'expense'
+    ? ['#0F766E','#B45309','#7C3AED','#DC2626','#2563EB','#16A34A','#DB2777','#4B5563','#CA8A04','#0891B2','#9333EA','#65A30D']
+    : ['#16A34A','#0F766E','#2563EB','#65A30D','#0891B2','#CA8A04','#7C3AED','#4B5563','#DB2777','#B45309','#9333EA','#DC2626'];
+}
+
+function setCatMode(mode) {
+  catMode = mode;
+  el('catModeExp').className = 'px-2.5 py-1 ' + (mode === 'expense' ? 'bg-[#101828] text-white' : 'bg-white text-slate-500 hover:bg-slate-50');
+  el('catModeInc').className = 'px-2.5 py-1 ' + (mode === 'income' ? 'bg-[#101828] text-white' : 'bg-white text-slate-500 hover:bg-slate-50');
+  buildAnalytics();
+}
+
+function shiftAnalytics(dir) {
+  const isYear = el('viewSelect').value === 'year';
+  if (!analyticsDate) analyticsDate = new Date(state.today + 'T00:00:00');
+  if (isYear) analyticsDate = new Date(analyticsDate.getFullYear() + dir, analyticsDate.getMonth(), 1);
+  else analyticsDate = new Date(analyticsDate.getFullYear(), analyticsDate.getMonth() + dir, 1);
+  buildAnalytics();
+}
+
+/* ==================================================================
+ *  DOWNLOAD REPORT — print-friendly PDF (via the browser's Save as
+ *  PDF) with BOTH doughnuts side by side, percentage labels on the
+ *  slices, the trend chart, and the filtered transaction table.
+ * ================================================================== */
+function reportDoughnutImage(byCat, mode, title) {
+  const cats = Object.keys(byCat).sort((a, b) => byCat[b] - byCat[a]);
+  const data = cats.map(c => byCat[c]);
+  const total = data.reduce((a, b) => a + b, 0);
+  const canvas = document.createElement('canvas');
+  canvas.width = 640; canvas.height = 440;
+  const chart = new Chart(canvas, {
+    type: 'doughnut',
+    plugins: [ChartDataLabels],   // opt-in per chart — percentage labels
+    data: {
+      labels: cats,
+      datasets: [{ data: data, backgroundColor: cats.map((c, i) => doughnutPalette(mode)[i % 12]) }]
+    },
+    options: {
+      responsive: false, animation: false, devicePixelRatio: 2,
+      plugins: {
+        title: { display: true, text: title, font: { size: 14, weight: 'bold' }, color: '#101828' },
+        legend: {
+          position: 'right',
+          labels: {
+            boxWidth: 10, font: { size: 10 },
+            generateLabels: chartInstance => {
+              const base = Chart.defaults.plugins.legend.labels.generateLabels(chartInstance);
+              base.forEach((lbl, i) => {
+                const p = total ? (data[i] / total * 100) : 0;
+                lbl.text = lbl.text + ' — ' + p.toFixed(1) + '%';
+              });
+              return base;
+            }
+          }
+        },
+        datalabels: {
+          color: '#ffffff', font: { weight: 'bold', size: 12 },
+          formatter: v => { const p = total ? (v / total * 100) : 0; return p >= 4 ? p.toFixed(1) + '%' : ''; }
+        }
+      }
+    }
+  });
+  const img = chart.toBase64Image();
+  chart.destroy();
+  return { img: img, total: total, count: cats.length };
+}
+
+function downloadReport() {
+  if (!trendChart) buildAnalytics();
+  const isYear = el('viewSelect').value === 'year';
+  const y = analyticsDate.getFullYear(), m = analyticsDate.getMonth();
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const periodLabel = isYear ? String(y) : monthNames[m] + ' ' + y;
+
+  const inPeriod = t => {
+    const ty = Number(t.date.slice(0, 4)), tm = Number(t.date.slice(5, 7)) - 1;
+    return ty === y && (isYear || tm === m);
+  };
+  const txns = visibleTransactions().filter(inPeriod)
+    .slice().sort((a, b) => a.date.localeCompare(b.date) || a.row - b.row);
+  const totIn = txns.reduce((s, t) => s + t.deposit, 0);
+  const totOut = txns.reduce((s, t) => s + t.withdrawal, 0);
+
+  // BOTH doughnuts, generated fresh so filters + period apply to each
+  const expMap = periodCategoryTotals(visibleTransactions(), y, m, isYear, 'withdrawal');
+  const incMap = periodCategoryTotals(visibleTransactions(), y, m, isYear, 'deposit');
+  const expDough = reportDoughnutImage(expMap, 'expense', 'Expense Category Breakdown');
+  const incDough = reportDoughnutImage(incMap, 'income', 'Income Category Breakdown');
+  const trendImg = trendChart.toBase64Image();
+
+  const rowsHtml = txns.map(t =>
+    '<tr>' +
+      '<td>' + esc(t.date) + '</td>' +
+      '<td>' + esc(t.state === 'settled' ? 'Settled' : (t.state === 'inputted' ? 'Inputted' : 'Planned')) + '</td>' +
+      '<td class="mono">' + esc(t.trace || '') + '</td>' +
+      '<td>' + esc(t.category || '') + '</td>' +
+      '<td>' + esc(t.beneficiary || '') + '</td>' +
+      '<td>' + esc(t.recipient || '') + '</td>' +
+      '<td>' + esc(t.details || '') + '</td>' +
+      '<td class="num neg">' + (t.withdrawal ? peso(t.withdrawal) : '') + '</td>' +
+      '<td class="num pos">' + (t.deposit ? peso(t.deposit) : '') + '</td>' +
+    '</tr>').join('');
+
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Cashflow Report — ' + esc(periodLabel) + '</title>' +
+    '<style>' +
+    'body{font-family:Helvetica,Arial,sans-serif;color:#101828;margin:32px;}' +
+    'h1{font-size:20px;margin:0;}h2{font-size:14px;margin:24px 0 8px;}' +
+    '.sub{color:#667085;font-size:12px;margin-top:2px;}' +
+    '.doughnuts{display:flex;gap:16px;margin-top:16px;flex-wrap:wrap;}' +
+    '.doughnuts img{width:48%;min-width:300px;border:1px solid #E4E7EC;border-radius:8px;padding:8px;box-sizing:border-box;}' +
+    '.trend img{width:100%;border:1px solid #E4E7EC;border-radius:8px;padding:8px;box-sizing:border-box;margin-top:12px;}' +
+    'table{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px;}' +
+    'th{text-align:left;border-bottom:2px solid #101828;padding:5px 6px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;}' +
+    'td{border-bottom:1px solid #E4E7EC;padding:5px 6px;vertical-align:top;}' +
+    '.mono{font-family:monospace;font-size:10px;}' +
+    '.num{text-align:right;font-family:monospace;white-space:nowrap;}' +
+    '.neg{color:#B42318;}.pos{color:#067647;}' +
+    '.totals{margin-top:10px;font-size:13px;font-weight:bold;}' +
+    '@media print{.doughnuts img{width:46%;}}' +
+    '</style></head><body>' +
+    '<h1>DELCAN Cashflow Intelligence — ' + esc(periodLabel) + '</h1>' +
+    '<p class="sub">Security Bank Disbursement · generated ' + esc(state.today) +
+      (filtersActive() ? ' · FILTERED VIEW (' + txns.length + ' matching transactions)' : '') + '</p>' +
+    '<div class="doughnuts"><img src="' + expDough.img + '"><img src="' + incDough.img + '"></div>' +
+    '<div class="trend"><img src="' + trendImg + '"></div>' +
+    '<h2>Transactions — ' + esc(periodLabel) + ' (' + txns.length + ')</h2>' +
+    '<table><thead><tr><th>Date</th><th>State</th><th>Trace</th><th>Category</th><th>Beneficiary</th><th>Recipient</th><th>Details</th><th>Withdrawal</th><th>Deposit</th></tr></thead>' +
+    '<tbody>' + rowsHtml + '</tbody></table>' +
+    '<p class="totals">Total outflows: <span class="neg">−' + peso(totOut) + '</span> &nbsp;·&nbsp; Total inflows: <span class="pos">+' + peso(totIn) + '</span> &nbsp;·&nbsp; Net: ' + (totIn - totOut < 0 ? '−' : '+') + peso(Math.abs(totIn - totOut)) + '</p>' +
+    '<script>window.onload=function(){window.print();}<\/script>' +
+    '</body></html>';
+
+  const w = window.open('', '_blank');
+  if (!w) { alert('Your browser blocked the report window — allow pop-ups for this page and try again.'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+/* ==================================================================
+ *  WIRING
+ * ================================================================== */
+el('refreshBtn').addEventListener('click', loadData);
+el('addBtn').addEventListener('click', () => openAddModal());
+el('dirOut').addEventListener('click', () => setDirection('out'));
+el('dirIn').addEventListener('click', () => setDirection('in'));
+el('saveAdd').addEventListener('click', saveTransaction);
+el('bulkToggle').addEventListener('click', () => setBulkMode(!bulkMode));
+el('saveBulk').addEventListener('click', saveBulk);
+el('bulkAddRow').addEventListener('click', () => { addBulkRow().querySelector('.b-ben').focus(); });
+['bDate', 'bRefDate', 'bTag', 'bStart', 'bEnd'].forEach(id => el(id).addEventListener('input', refreshTracePreviews));
+
+// 'Are you sure?' confirmation on every Cancel
+el('cancelAdd').addEventListener('click', () => {
+  if (!confirm('Are you sure? Unsaved changes will be lost.')) return;
+  backlogFrom = null;
+  el('addModal').close();
+});
+el('cancelSettle').addEventListener('click', () => {
+  if (!confirm('Are you sure? Unsaved changes will be lost.')) return;
+  el('settleModal').close();
+});
+el('cancelBlAdd').addEventListener('click', () => {
+  if (!confirm('Are you sure? Unsaved changes will be lost.')) return;
+  blEditRef = null;
+  el('backlogModal').close();
+});
+
+el('saveSettle').addEventListener('click', saveSettle);
+el('closeDay').addEventListener('click', () => el('dayModal').close());
+el('dayAddBtn').addEventListener('click', () => { el('dayModal').close(); openAddModal(activeDay); });
+el('closeBd').addEventListener('click', () => el('breakdownModal').close());
+el('cardOut').addEventListener('click', () => openBreakdown('out'));
+el('cardIn').addEventListener('click', () => openBreakdown('in'));
+
+// Nested detail view
+el('closeDetail').addEventListener('click', () => el('detailModal').close());
+el('backDetail').addEventListener('click', () => el('detailModal').close());
+
+// Backlog drawer
+el('backlogBtn').addEventListener('click', openDrawer);
+el('drawerClose').addEventListener('click', closeDrawer);
+el('drawerOverlay').addEventListener('click', () => { closeDrawer(); closeChecksDrawer(); });
+el('backlogSort').addEventListener('change', renderBacklog);
+el('blAddEntry').addEventListener('click', () => { closeDrawer(); openBacklogModal(null); });
+el('saveBlAdd').addEventListener('click', saveBacklogEntry);
+
+// Check Registry drawer
+el('checksBtn').addEventListener('click', openChecksDrawer);
+el('checksDrawerClose').addEventListener('click', closeChecksDrawer);
+el('chkBatchFilter').addEventListener('change', renderChecks);
+el('saveDefer').addEventListener('click', saveDefer);
+el('cancelDefer').addEventListener('click', () => {
+  if (!confirm('Are you sure? Unsaved changes will be lost.')) return;
+  deferCtx = null;
+  el('deferModal').close();
+});
+
+// Command Center search + advanced filters
+el('searchInput').addEventListener('input', applyFiltersDebounced);
+el('filterBtn').addEventListener('click', () => el('filterPanel').classList.toggle('hidden'));
+['fltFrom', 'fltTo', 'fltCategory', 'fltType', 'fltMin', 'fltMax'].forEach(id =>
+  el(id).addEventListener('input', applyFiltersDebounced));
+el('fltClear').addEventListener('click', () => {
+  el('searchInput').value = '';
+  ['fltFrom', 'fltTo', 'fltCategory', 'fltType', 'fltMin', 'fltMax'].forEach(id => { el(id).value = ''; });
+  applyFilters();
+});
+
+// View switch: Calendar | List, plus the standalone Analytics mode
+el('segCal').addEventListener('click', () => setBaseView('calendar'));
+el('segList').addEventListener('click', () => setBaseView('list'));
+el('analyticsToggle').addEventListener('click', toggleAnalytics);
+el('viewSelect').addEventListener('change', e => {
+  if (calendar) calendar.changeView(e.target.value === 'year' ? 'multiMonthYear' : 'dayGridMonth');
+  if (analyticsOn) buildAnalytics();
+  if (baseView === 'list') renderListTable(); 
+});
+el('anPrev').addEventListener('click', () => shiftAnalytics(-1));
+el('anNext').addEventListener('click', () => shiftAnalytics(1));
+
+// Analytics extras: doughnut mode + report download
+el('catModeExp').addEventListener('click', () => setCatMode('expense'));
+el('catModeInc').addEventListener('click', () => setCatMode('income'));
+el('dlReport').addEventListener('click', downloadReport);
+
+// Close any open ⋯ menu when clicking elsewhere
+document.addEventListener('click', e => {
+  if (!e.target.closest('.more-wrap')) {
+    document.querySelectorAll('.more-menu').forEach(m => m.classList.add('hidden'));
+  }
+});
+
+// Smart Memory quads: single form + bulk Shared Header
+el('fBeneficiary').addEventListener('input', e =>
+  applyAccountMemory(e.target.value, el('fDestination'), el('fAccount'), el('fRecipient')));
+wireSmartMemory(el('fBeneficiary'), el('fRecipient'), el('fDestination'), el('fAccount'));
+wireSmartMemory(null, el('bRecipient'), el('bDestination'), el('bAccount'));
+
+// High-Velocity trace generator + one-click copy
+el('fDate').addEventListener('input', suggestSingleTrace);
+el('fCategory').addEventListener('input', suggestSingleTrace);
+el('fDetails').addEventListener('input', suggestSingleTrace);
+el('fTrace').addEventListener('input', () => { traceEdited = true; });
+el('copyTrace').addEventListener('click', () => {
+  const v = el('fTrace').value;
+  const done = () => {
+    const b = el('copyTrace');
+    b.textContent = '✓ Copied'; b.classList.add('text-[#16a34a]');
+    setTimeout(() => { b.textContent = '⧉ Copy'; b.classList.remove('text-[#16a34a]'); }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(v).then(done).catch(() => { el('fTrace').select(); document.execCommand('copy'); done(); });
+  } else { el('fTrace').select(); document.execCommand('copy'); done(); }
+});
+
+el('thresholdInput').addEventListener('change', e => {
+  const v = Number(e.target.value) || 0;
+  state.threshold = v;
+  computeProjection(); renderSummary();
+  if (!analyticsOn && baseView === 'calendar') renderCalendar(); else calendarDirty = true;
+  if (!analyticsOn && baseView === 'list') renderListTable();
+  google.script.run.saveThreshold(getAuth(), v);
+});
+window.addEventListener('load', () => { if (calendar && baseView === 'calendar' && !analyticsOn) calendar.updateSize(); });
+
+// Initialize directional type dropdowns before first open
+setTypeOptions(el('fType'), 'out');
+setTypeOptions(el('bType'), 'out');
+
+/* --- List View Arrow Navigation (Bulletproof) --- */
+const btnPrev = el('listPrev');
+const btnNext = el('listNext');
+
+if (btnPrev) {
+  btnPrev.onclick = (e) => {
+    e.preventDefault(); // Stops any accidental double-firing
+    if (!listDate) listDate = new Date(state.today + 'T00:00:00');
+    listDate.setDate(1); // Anchor to 1st of month
+
+    const isYearView = el('viewSelect').value === 'year';
+    if (isYearView) listDate.setFullYear(listDate.getFullYear() - 1);
+    else listDate.setMonth(listDate.getMonth() - 1);
+    
+    renderListTable();
+  };
+}
+
+if (btnNext) {
+  btnNext.onclick = (e) => {
+    e.preventDefault(); // Stops any accidental double-firing
+    if (!listDate) listDate = new Date(state.today + 'T00:00:00');
+    listDate.setDate(1); // Anchor to 1st of month
+
+    const isYearView = el('viewSelect').value === 'year';
+    if (isYearView) listDate.setFullYear(listDate.getFullYear() + 1);
+    else listDate.setMonth(listDate.getMonth() + 1);
+    
+    renderListTable();
+  };
+}
+
+bootAuth();
+</script>
+</body>
+</html>
